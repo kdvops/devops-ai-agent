@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devops-ai-agent-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: devops-ai-agent
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: devops-ai
+  source:
+    repoURL: https://github.com/REPLACE_WITH_YOUR_ORG/devops-ai-agent.git
+    targetRevision: main
+    path: app/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devops-ai
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

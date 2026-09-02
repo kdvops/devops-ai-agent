@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devops-ai-agent-config
+  namespace: devops-ai
+data:
+  KUBERNETES_READ_ONLY: "true"
+  ALLOWED_NAMESPACES: "devops-ai"
+  MAX_TOOL_RUNTIME_SECONDS: "15"
+  WORKSPACE_ROOT: "/workspace"

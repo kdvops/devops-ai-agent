@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devops-ai
+  namespace: argocd
+spec:
+  description: DevOps AI Agent controlled deployment
+  sourceRepos:
+    - https://github.com/REPLACE_WITH_YOUR_ORG/devops-ai-agent.git
+  destinations:
+    - namespace: devops-ai
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

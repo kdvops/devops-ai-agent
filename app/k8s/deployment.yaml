@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-ai-agent
+  namespace: devops-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devops-ai-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devops-ai-agent
+    spec:
+      serviceAccountName: devops-ai-agent
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: ghcr.io/REPLACE_WITH_YOUR_ORG/devops-ai-agent:0.2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: devops-ai-agent-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: temporary-files
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 10
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        - name: temporary-files
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-ai-agent
+  namespace: devops-ai
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devops-ai-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
