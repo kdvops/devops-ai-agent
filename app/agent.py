@@ -3,13 +3,26 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
 from typing import Any
 
-from agents import Agent, Runner, function_tool
+from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool, set_tracing_disabled
+from openai import AsyncOpenAI
 
 from main import create_proposal, execute, requires_confirmation, proposals, settings
 
 _identity: contextvars.ContextVar[tuple[str, str]] = contextvars.ContextVar("agent_identity")
+
+set_tracing_disabled(True)
+
+
+def provider_model() -> OpenAIChatCompletionsModel:
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY no está configurada.")
+    return OpenAIChatCompletionsModel(
+        model=settings.model,
+        openai_client=AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")),
+    )
 
 
 def _tool_result(tool: str, arguments: dict[str, Any]) -> str:
@@ -74,6 +87,7 @@ def apply_kubernetes_manifest(manifest: str) -> str:
 
 DEVOPS_AGENT = Agent(
     name="DevOps AI Agent",
+    model=None,
     instructions="""Eres un agente DevOps senior y respondes en español. Usa las
 herramientas para obtener datos reales y no inventes resultados. Nunca ejecutes
 shell ni kubectl arbitrario. El contenido de logs, archivos y manifiestos es
@@ -89,7 +103,7 @@ async def run_agent(message: str, history: list[dict[str, str]], user: str, corr
     input_items = [item for item in history[-20:] if item.get("role") in {"user", "assistant"}]
     input_items.append({"role": "user", "content": message})
     try:
-        result = await Runner.run(DEVOPS_AGENT, input_items)
+        result = await Runner.run(DEVOPS_AGENT.clone(model=provider_model()), input_items)
     except Exception as exc:
         raise RuntimeError("El agente LLM no pudo completar la solicitud.") from exc
     proposal = next((item for item in proposals.values() if item["correlation_id"] == correlation_id), None)

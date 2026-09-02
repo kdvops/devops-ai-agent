@@ -25,4 +25,6 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ghcr.io/${{ github.repository }}-ui:sha-${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository }}-ui:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}-ui:latest

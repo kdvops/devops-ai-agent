@@ -2,6 +2,8 @@ FROM node:22-alpine AS build
 WORKDIR /src
 COPY package.json tsconfig.json next-env.d.ts next.config.ts ./
 COPY app ./app
+ARG NEXT_PUBLIC_API_URL=/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm install && npm run build
 FROM node:22-alpine
 WORKDIR /app

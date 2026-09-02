@@ -16,6 +16,7 @@ from threading import Lock
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import yaml
@@ -60,6 +61,13 @@ class ConfirmationRequest(BaseModel):
 
 
 app = FastAPI(title="DevOps AI Agent", version="0.2.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-User"],
+)
 
 
 @app.on_event("startup")

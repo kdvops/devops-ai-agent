@@ -6,7 +6,7 @@ metadata:
 spec:
   description: DevOps AI Agent controlled deployment
   sourceRepos:
-    - https://github.com/REPLACE_WITH_YOUR_ORG/devops-ai-agent.git
+    - https://github.com/kdvops/devops-ai-agent.git
   destinations:
     - namespace: devops-ai
       server: https://kubernetes.default.svc

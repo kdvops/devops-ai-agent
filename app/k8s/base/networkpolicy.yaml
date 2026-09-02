@@ -23,3 +23,12 @@ spec:
       ports:
         - protocol: UDP
           port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: devops-ai
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379

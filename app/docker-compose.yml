@@ -1,10 +1,20 @@
 services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8081/api
+    ports: ["3000:3000"]
+    depends_on: [agent]
   agent:
     build: .
     ports: ["8080:8080"]
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       MODEL: ${MODEL:-gpt-5.5}
+      KUBECONFIG: /home/agent/.kube/config
       WORKSPACE_ROOT: /workspace
       KUBERNETES_READ_ONLY: "true"
       ALLOWED_NAMESPACES: default
@@ -13,6 +23,7 @@ services:
       PERSISTENCE_ENABLED: "true"
     volumes:
       - ./workspace:/workspace
+      - ${USERPROFILE}/.kube/config:/home/agent/.kube/config:ro
     depends_on: [postgres, redis]
   postgres:
     image: postgres:16-alpine

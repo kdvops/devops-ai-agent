@@ -10,9 +10,9 @@ metadata:
 spec:
   project: devops-ai
   source:
-    repoURL: https://github.com/REPLACE_WITH_YOUR_ORG/devops-ai-agent.git
+    repoURL: https://github.com/kdvops/devops-ai-agent.git
     targetRevision: main
-    path: app/k8s
+    path: app/k8s/overlays/dev
   destination:
     server: https://kubernetes.default.svc
     namespace: devops-ai

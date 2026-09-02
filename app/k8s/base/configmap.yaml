@@ -4,6 +4,7 @@ metadata:
   name: devops-ai-agent-config
   namespace: devops-ai
 data:
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
   MODEL: "gpt-5.5"
   KUBERNETES_READ_ONLY: "true"
   ALLOWED_NAMESPACES: "devops-ai"

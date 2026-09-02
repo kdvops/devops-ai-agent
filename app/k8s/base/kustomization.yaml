@@ -10,3 +10,4 @@ resources:
   - frontend.yaml
   - data-services.yaml
   - worker.yaml
+  - workspace-pvc.yaml

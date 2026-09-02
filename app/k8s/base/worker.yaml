@@ -19,7 +19,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: worker
-          image: ghcr.io/REPLACE_WITH_YOUR_ORG/devops-ai-agent:0.2.0
+          image: ghcr.io/kdvops/devops-ai-agent:latest
           command: ["python", "worker.py"]
           envFrom:
             - configMapRef:

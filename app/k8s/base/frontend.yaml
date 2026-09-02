@@ -20,7 +20,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          image: ghcr.io/REPLACE_WITH_YOUR_ORG/devops-ai-agent-ui:0.2.0
+          image: ghcr.io/kdvops/devops-ai-agent-ui:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
               name: http
