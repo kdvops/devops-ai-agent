@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-ai-agent-frontend
+  namespace: devops-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devops-ai-agent-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devops-ai-agent-frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: ghcr.io/REPLACE_WITH_YOUR_ORG/devops-ai-agent-ui:0.2.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: /api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 15
+      volumes:
+        - name: temporary-files
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-ai-agent-frontend
+  namespace: devops-ai
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devops-ai-agent-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

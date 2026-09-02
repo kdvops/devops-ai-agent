@@ -30,6 +30,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: devops-ai-agent-config
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: OPENAI_API_KEY
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-data
+                  key: POSTGRES_PASSWORD
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

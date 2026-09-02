@@ -4,7 +4,11 @@ metadata:
   name: devops-ai-agent-config
   namespace: devops-ai
 data:
+  MODEL: "gpt-5.5"
   KUBERNETES_READ_ONLY: "true"
   ALLOWED_NAMESPACES: "devops-ai"
   MAX_TOOL_RUNTIME_SECONDS: "15"
   WORKSPACE_ROOT: "/workspace"
+  DATABASE_URL: "postgresql+asyncpg://devops@postgres:5432/devops_ai"
+  REDIS_URL: "redis://redis:6379/0"
+  PERSISTENCE_ENABLED: "true"

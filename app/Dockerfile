@@ -3,7 +3,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends kubernetes-clie
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py index.html ./
+COPY main.py agent.py persistence.py app_queue.py worker.py index.html ./
+COPY integrations ./integrations
 RUN useradd --create-home --uid 10001 agent && mkdir /workspace && chown agent:agent /workspace
 USER 10001
 ENV WORKSPACE_ROOT=/workspace KUBERNETES_READ_ONLY=true ALLOWED_NAMESPACES=default

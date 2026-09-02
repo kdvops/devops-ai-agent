@@ -7,3 +7,6 @@ resources:
   - deployment.yaml
   - networkpolicy.yaml
   - ingress.yaml
+  - frontend.yaml
+  - data-services.yaml
+  - worker.yaml

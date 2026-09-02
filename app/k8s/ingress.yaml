@@ -9,10 +9,17 @@ spec:
     - host: devops-ai.example.com
       http:
         paths:
-          - path: /
+          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: devops-ai-agent
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devops-ai-agent-frontend
                 port:
                   name: http
