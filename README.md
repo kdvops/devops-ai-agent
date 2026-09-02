@@ -1,69 +1,167 @@
 # DevOps AI Agent
 
-Asistente web para consultar un clúster Kubernetes mediante la identidad del pod.
-Las consultas usan `kubectl` con argumentos validados; la escritura de archivos y
-la aplicación de manifiestos requieren confirmación explícita.
+Asistente DevOps conversacional para consultar Kubernetes y operar sobre un
+workspace con controles de autorización, confirmación y auditoría. El MVP usa
+OpenAI como cerebro, FastAPI como backend, Kubernetes Python Client para lecturas
+y `kubectl` con argumentos controlados para aplicar manifiestos aprobados.
 
-## Desarrollo local
+## Arquitectura
+
+```text
+Usuario
+  -> Next.js frontend
+  -> FastAPI backend
+  -> OpenAI Agents SDK
+       |-> Kubernetes Python Client (lecturas)
+       |-> workspace seguro (lecturas/escrituras propuestas)
+       |-> kubectl validado (manifiestos confirmados)
+       |-> PostgreSQL / Redis
+```
+
+El stack de despliegue incluye backend, frontend, worker, PostgreSQL, Redis,
+Ingress, RBAC, NetworkPolicy y almacenamiento persistente del workspace. El
+frontend y backend tienen imágenes y workflows de publicación independientes.
+
+## Requisitos
+
+- Docker Desktop para desarrollo local.
+- Python 3.12 y `pytest` para pruebas fuera de Docker.
+- `kubectl` con un contexto válido si se quiere consultar un clúster desde Docker.
+- Un API key de OpenAI con acceso al modelo configurado.
+- Para Kubernetes: Argo CD, un registry GHCR accesible y un StorageClass para el PVC.
+
+## Ejecución local
 
 ```powershell
 cd app
+Copy-Item .env.example .env
+# Editar .env y definir OPENAI_API_KEY
 docker compose up --build
 ```
 
-Abre `http://localhost:8080`. Para usar DeepSeek, copia `app/.env.example` a
-`app/.env`, configura tu key y ejecuta Compose. El usuario local se envía mediante el encabezado
-`X-User` desde la interfaz; esto es identidad de desarrollo, no autenticación
-empresarial. Kubernetes permanece en modo de solo lectura por defecto.
+Abrir [http://localhost:3000](http://localhost:3000) para usar el chat. La API
+está en `http://localhost:8080`; el endpoint `/api/chat` requiere `POST` y el
+encabezado `X-User`, por lo que no debe abrirse directamente como una página.
 
-## Despliegue Kubernetes
+Configuración mínima de `app/.env`:
 
-1. Construye y publica las imágenes con los workflows de GitHub Actions.
-2. Ajusta `ALLOWED_NAMESPACES` en `app/k8s/base/configmap.yaml`.
-3. Crea el secreto del proveedor LLM sin guardarlo en Git:
-
-```powershell
-kubectl create secret generic devops-ai-agent-secrets -n devops-ai --from-literal=OPENAI_API_KEY=$env:OPENAI_API_KEY
-kubectl create secret generic devops-ai-data -n devops-ai --from-literal=POSTGRES_PASSWORD="genera-un-secreto-fuerte"
+```env
+OPENAI_API_KEY=tu_api_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+MODEL=gpt-5.5
 ```
 
-4. Crea el namespace y aplica la base de recursos:
+En desarrollo local Compose monta el kubeconfig del usuario en modo lectura:
 
-```powershell
-kubectl apply -k app/k8s/overlays/dev
+```text
+$USERPROFILE/.kube/config -> /home/agent/.kube/config
 ```
 
-El RBAC incluido permite consultar pods, logs y workloads en `devops-ai`. Para
-consultar otro namespace, crea un `Role` y `RoleBinding` equivalentes allí y
-añádelo a `ALLOWED_NAMESPACES`. No habilites cambios Kubernetes sin una revisión
-específica de RBAC y políticas.
+El backend intenta primero configuración in-cluster y, si no está dentro de
+Kubernetes, usa `KUBECONFIG`/kubeconfig local.
 
-## GitOps con Argo CD
+## Herramientas del agente
 
-La aplicación declarativa está en `app/argocd` y apunta al overlay
-`app/k8s/overlays/dev`. Ajusta el host del Ingress en
-`app/k8s/base/ingress.yaml`
-antes de desplegar.
+Herramientas de lectura disponibles:
 
-Instala Argo CD en el clúster y registra la aplicación:
+- `cluster_status`: nodos del clúster.
+- `list_pods`: pods de un namespace autorizado.
+- `get_workload`: Deployments, StatefulSets y DaemonSets.
+- `get_pod_logs`: logs recientes de un pod autorizado.
+- `list_files` y `read_file`: workspace autorizado.
+
+Herramientas con cambio de estado:
+
+- `write_file`: propone escribir en el workspace.
+- `apply_kubernetes_manifest`: valida YAML, tipo, namespace y ejecuta dry-run antes de aplicar; permanece bloqueada con `KUBERNETES_READ_ONLY=true`.
+
+No existe ejecución de shell arbitrario ni un endpoint para enviar tokens
+Kubernetes desde el frontend.
+
+## Kubernetes y Argo CD
+
+La estructura GitOps es:
+
+```text
+app/k8s/base/              recursos comunes
+app/k8s/overlays/dev/      configuración del entorno dev
+app/argocd/project.yaml    AppProject
+app/argocd/application-dev.yaml
+```
+
+Validar los manifiestos:
+
+```powershell
+kubectl kustomize app/k8s/overlays/dev
+kubectl apply -k app/k8s/overlays/dev --dry-run=client
+```
+
+Crear primero los secretos fuera de Git:
+
+```powershell
+kubectl create namespace devops-ai
+kubectl create secret generic devops-ai-agent-secrets -n devops-ai `
+  --from-literal=OPENAI_API_KEY=$env:OPENAI_API_KEY
+kubectl create secret generic devops-ai-data -n devops-ai `
+  --from-literal=POSTGRES_PASSWORD="genera-un-secreto-fuerte"
+```
+
+Registrar la aplicación en Argo CD:
 
 ```powershell
 kubectl apply -n argocd -f app/argocd/project.yaml
 kubectl apply -n argocd -f app/argocd/application-dev.yaml
 ```
 
-Argo CD sincronizará `main`, corregirá cambios manuales (`selfHeal`) y no
-eliminará recursos automáticamente (`prune: false`). Los workflows
-`.github/workflows/app-image.yml` y `.github/workflows/container.yml` publican
-las imágenes backend y frontend en GHCR con los tags `sha-*` y `latest`. El
-overlay `dev` consume `latest` para el MVP.
+Argo CD sincroniza la rama `main`, aplica self-heal y mantiene `prune: false`.
+Las imágenes son `ghcr.io/kdvops/devops-ai-agent` y
+`ghcr.io/kdvops/devops-ai-agent-ui`. Los workflows publican `latest` y `sha-*`.
+El overlay dev usa `latest` para el MVP; producción debe usar tags inmutables o
+Argo CD Image Updater.
 
-El chat usa OpenAI Agents SDK con function calling: el modelo elige entre las
-herramientas declaradas y el backend valida cada llamada antes de ejecutarla.
-Configura otro modelo con `MODEL` si tu proyecto tiene acceso a él.
+Si GHCR es privado, crea también un `imagePullSecret` y referencia ese secreto
+en los deployments. El Ingress usa el host `devops-ai.example.com` por defecto;
+ajústalo al dominio real.
 
-La estructura del MVP queda separada por responsabilidades: `app/agent.py`
-contiene el agente y sus tools, `app/persistence.py` los modelos PostgreSQL,
-`app/app_queue.py` la cola Redis, `app/integrations/` las integraciones de
-Kubernetes, Jobs y Ansible, y `frontend/` la interfaz Next.js. La contraseña
-`POSTGRES_PASSWORD` se crea como Secret en Kubernetes; no la guardes en Git.
+## CI/CD
+
+- `.github/workflows/app-image.yml`: construye y publica el backend cuando cambia `app/**`.
+- `.github/workflows/container.yml`: construye y publica el frontend cuando cambia `frontend/**`.
+- Ambos usan GitHub Container Registry y `GITHUB_TOKEN` con permiso `packages: write`.
+
+## Configuración Kubernetes
+
+- `OPENAI_API_KEY`: Secret obligatorio.
+- `OPENAI_BASE_URL`: `https://api.openai.com/v1`.
+- `MODEL`: `gpt-5.5`.
+- `KUBERNETES_READ_ONLY`: `true` por defecto.
+- `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas.
+- `WORKSPACE_ROOT`: `/workspace`.
+- `DATABASE_URL`, `POSTGRES_PASSWORD` y `REDIS_URL`: persistencia/cola.
+
+El `ServiceAccount` tiene lectura de nodos a nivel de clúster y lectura de pods,
+logs y workloads dentro de `devops-ai`. Para consultar `argocd` u otro namespace
+hay que agregar explícitamente la autorización y el RBAC correspondiente.
+
+## Pruebas
+
+```powershell
+pytest -q app/tests
+git diff --check
+kubectl kustomize app/k8s/overlays/dev
+```
+
+La prueba manual mínima es abrir el frontend, enviar un mensaje, consultar
+`/api/health` y verificar que el backend registra un `correlation_id` sin
+imprimir secretos.
+
+## Estado del MVP
+
+Implementado: chat web, OpenAI Agents SDK, herramientas Kubernetes de lectura,
+workspace protegido, propuestas de cambio, Docker Compose, imágenes GHCR,
+Kustomize, Argo CD, RBAC, NetworkPolicy, PostgreSQL/Redis y health checks.
+
+Pendiente antes de producción: OIDC/SSO y autorización por usuario, persistencia
+completa de conversaciones/ejecuciones/aprobaciones, tags inmutables, escaneo y
+firma de imágenes, External Secrets/Vault, backups/HA de datos, métricas y
+ejecución completa de Jobs/Ansible.
