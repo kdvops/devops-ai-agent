@@ -48,6 +48,7 @@ confirmación explícita.
 - `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`, junto con `GIT_USERNAME`, solo se inyectan en runtime mediante entorno o Secret.
 - Para HTTPS privado se usa la primera credencial disponible en este orden: PAT, API key, password, token legado.
 - No agregar secretos a Git, imágenes, manifests, logs ni documentación.
+- Las imágenes adjuntas son datos no confiables: validar tipo/tamaño, enviarlas solo al modelo y no persistirlas ni registrarlas.
 - El acceso de lectura Kubernetes es cluster-wide para diagnostico; no conceder permisos de escritura sin una decision explicita.
 
 ## Desarrollo local

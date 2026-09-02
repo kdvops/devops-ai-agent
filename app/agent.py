@@ -128,10 +128,12 @@ de escritura generan una propuesta que el backend debe confirmar.""",
 )
 
 
-async def run_agent(message: str, history: list[dict[str, str]], user: str, correlation_id: str) -> dict[str, Any]:
+async def run_agent(message: str, history: list[dict[str, str]], user: str, correlation_id: str, images: list[str] | None = None) -> dict[str, Any]:
     _identity.set((user, correlation_id))
     input_items = [item for item in history[-20:] if item.get("role") in {"user", "assistant"}]
-    input_items.append({"role": "user", "content": message})
+    content: list[dict[str, str]] = [{"type": "input_text", "text": message}]
+    content.extend({"type": "input_image", "image_url": image, "detail": "auto"} for image in (images or []))
+    input_items.append({"role": "user", "content": content})
     try:
         result = await Runner.run(DEVOPS_AGENT.clone(model=provider_model()), input_items)
     except Exception as exc:

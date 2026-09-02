@@ -177,7 +177,7 @@ imprimir secretos.
 
 ## Estado del MVP
 
-Implementado: chat web, OpenAI Agents SDK, herramientas Kubernetes de lectura,
+Implementado: chat web con adjuntos de imagen multimodales, OpenAI Agents SDK, herramientas Kubernetes de lectura,
 workspace protegido, integración Git controlada para clonar/revisar/commit/push,
 propuestas de cambio, Docker Compose, imágenes GHCR,
 Kustomize, Argo CD, RBAC, NetworkPolicy, PostgreSQL/Redis y health checks.

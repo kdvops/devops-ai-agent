@@ -11,6 +11,8 @@ import tempfile
 import time
 import uuid
 import asyncio
+import base64
+import binascii
 from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
@@ -49,6 +51,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12_000)
     namespace: str | None = Field(default=None, max_length=63)
     history: list[dict[str, str]] = Field(default_factory=list, max_length=20)
+    images: list[str] = Field(default_factory=list, max_length=3)
 
 
 class ActionRequest(BaseModel):
@@ -295,10 +298,35 @@ def clean_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
     return cleaned
 
 
-def run_llm_agent(message: str, history: list[dict[str, str]], user: str, correlation_id: str, namespace: str | None) -> dict[str, Any]:
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def clean_images(images: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for image in images:
+        if not isinstance(image, str) or not image.startswith("data:") or ";base64," not in image:
+            raise HTTPException(422, "La imagen debe enviarse como data URL base64.")
+        header, encoded = image.split(",", 1)
+        mime_type = header[5:].split(";", 1)[0].lower()
+        if mime_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(422, "Formato de imagen no permitido. Usa JPEG, PNG, WebP o GIF.")
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(422, "La imagen base64 no es válida.") from exc
+        if not decoded or len(decoded) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, "Cada imagen debe pesar como máximo 5 MB.")
+        cleaned.append(f"data:{mime_type};base64,{encoded}")
+    return cleaned
+
+
+def run_llm_agent(message: str, history: list[dict[str, str]], user: str, correlation_id: str, namespace: str | None, images: list[str] | None = None) -> dict[str, Any]:
     client = openai_client()
     context = f"Namespace solicitado por el usuario: {namespace}." if namespace else "No hay namespace prefijado; pide aclaración si es necesario."
-    input_items: list[Any] = clean_history(history) + [{"role": "user", "content": f"{message}\n\n{context}"}]
+    content: list[dict[str, str]] = [{"type": "input_text", "text": f"{message}\n\n{context}"}]
+    content.extend({"type": "input_image", "image_url": image, "detail": "auto"} for image in (images or []))
+    input_items: list[Any] = clean_history(history) + [{"role": "user", "content": content}]
     try:
         response = client.responses.create(
             model=settings.model,
@@ -385,9 +413,10 @@ async def chat(request: ChatRequest, x_user: str | None = Header(default=None)) 
     audit("chat_received", correlation_id, user, model=settings.model, framework="openai-agents")
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(503, "OPENAI_API_KEY no está configurada.")
+    images = clean_images(request.images)
     try:
         from agent import run_agent
-        outcome = await run_agent(request.message, request.history, user, correlation_id)
+        outcome = await run_agent(request.message, request.history, user, correlation_id, images)
     except RuntimeError as exc:
         audit("chat_failed", correlation_id, user, status=502)
         raise HTTPException(502, str(exc)) from exc

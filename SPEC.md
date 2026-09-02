@@ -114,6 +114,10 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
 - `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
 
+El chat acepta hasta tres imagenes JPEG, PNG, WebP o GIF de hasta 5 MiB cada
+una. El backend valida los data URLs y los entrega al modelo como `input_image`
+junto al prompt textual; no persiste ni registra el contenido de la imagen.
+
 No existe una tool de shell arbitrario, una tool de eliminacion de recursos ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales.
 
 ## 7. API HTTP
