@@ -59,9 +59,11 @@ kubectl apply -n argocd -f app/argocd/application-dev.yaml
 
 Argo CD sincronizará `main`, corregirá cambios manuales (`selfHeal`) y no
 eliminará recursos automáticamente (`prune: false`). El workflow
-`.github/workflows/container.yml` publica la imagen en GHCR; actualiza el tag
-de `app/k8s/deployment.yaml` mediante un cambio revisado en Git antes de que
-Argo CD despliegue una nueva versión.
+`.github/workflows/app-image.yml` publica la imagen backend en GHCR solo cuando
+el push a `main` contiene cambios en `app/**`. También puede ejecutarse
+manualmente desde la pestaña Actions. Actualiza el tag de
+`app/k8s/deployment.yaml` mediante un cambio revisado en Git antes de que Argo
+CD despliegue una nueva versión.
 
 El chat usa la Responses API de OpenAI con function calling: el modelo elige
 entre las herramientas declaradas y el backend valida cada llamada antes de
