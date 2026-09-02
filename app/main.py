@@ -30,12 +30,13 @@ logging.basicConfig(level=os.getenv("AUDIT_LOG_LEVEL", "INFO"), format="%(messag
 class Settings(BaseModel):
     # Docker and Kubernetes set /workspace; a local clone stays self-contained.
     workspace_root: Path = Path(os.getenv("WORKSPACE_ROOT", str(APP_DIR / "workspace")))
-    allowed_namespaces: set[str] = Field(default_factory=lambda: {x.strip() for x in os.getenv("ALLOWED_NAMESPACES", "default").split(",") if x.strip()})
+    allowed_namespaces: set[str] = Field(default_factory=lambda: {x.strip() for x in os.getenv("ALLOWED_NAMESPACES", "*").split(",") if x.strip()})
     kubernetes_read_only: bool = os.getenv("KUBERNETES_READ_ONLY", "true").lower() == "true"
     max_tool_runtime_seconds: int = int(os.getenv("MAX_TOOL_RUNTIME_SECONDS", "15"))
     proposal_ttl_seconds: int = int(os.getenv("PROPOSAL_TTL_SECONDS", "300"))
     model: str = os.getenv("MODEL", "gpt-5.5")
     max_output_tokens: int = int(os.getenv("MAX_OUTPUT_TOKENS", "2_000"))
+    git_allowed_hosts: set[str] = Field(default_factory=lambda: {x.strip().lower() for x in os.getenv("GIT_ALLOWED_HOSTS", "github.com,gitlab.com,bitbucket.org").split(",") if x.strip()})
 
 
 settings = Settings()
@@ -51,7 +52,7 @@ class ChatRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    tool: Literal["cluster_status", "list_pods", "get_workload", "get_pod_logs", "list_files", "read_file", "write_file", "apply_kubernetes_manifest"]
+    tool: Literal["cluster_status", "list_pods", "get_workload", "get_pod_logs", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_commit", "git_push"]
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -89,6 +90,11 @@ LLM_TOOLS = [
     {"type": "function", "name": "read_file", "description": "Lee un archivo dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "write_file", "description": "Crea o modifica un archivo autorizado. Siempre requiere confirmación del usuario.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "apply_kubernetes_manifest", "description": "Propone aplicar un manifiesto permitido. Siempre requiere confirmación y el modo lectura debe estar desactivado.", "parameters": {"type": "object", "properties": {"manifest": {"type": "string"}}, "required": ["manifest"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_clone", "description": "Propone clonar un repositorio HTTPS autorizado dentro del workspace.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["url", "repo_path", "branch"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_status", "description": "Consulta la rama y cambios de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_diff", "description": "Consulta el diff de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_commit", "description": "Propone crear un commit de los cambios del repositorio; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "message": {"type": "string"}}, "required": ["repo_path", "message"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_push", "description": "Propone enviar una rama al remoto origin; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
 ]
 
 AGENT_INSTRUCTIONS = """Eres un agente DevOps responsable y preciso. Responde en español.
@@ -120,7 +126,7 @@ def current_user(x_user: str | None) -> str:
 
 def validate_namespace(namespace: str | None) -> str:
     selected = namespace or "default"
-    if not RESOURCE_NAME.fullmatch(selected) or selected not in settings.allowed_namespaces:
+    if not RESOURCE_NAME.fullmatch(selected) or ("*" not in settings.allowed_namespaces and selected not in settings.allowed_namespaces):
         raise HTTPException(403, "El namespace solicitado no está autorizado.")
     return selected
 
@@ -177,6 +183,24 @@ def kubectl(arguments: list[str]) -> dict[str, Any]:
 
 
 def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    if tool.startswith("git_"):
+        from integrations import git_client
+        try:
+            if tool == "git_clone":
+                return git_client.clone(settings.workspace_root, arguments.get("url", ""), arguments.get("repo_path", ""), arguments.get("branch"), settings.git_allowed_hosts, settings.max_tool_runtime_seconds)
+            if tool == "git_status":
+                return git_client.status(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
+            if tool == "git_diff":
+                return git_client.diff(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
+            if tool == "git_commit":
+                return git_client.commit(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("message", ""), settings.max_tool_runtime_seconds)
+            if tool == "git_push":
+                return git_client.push(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        raise HTTPException(422, "Herramienta Git no soportada.")
     if tool == "cluster_status":
         from integrations.kubernetes_client import read_tool
         return read_tool(tool, arguments, validate_namespace, validate_name)
@@ -231,7 +255,7 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def requires_confirmation(tool: str) -> bool:
-    return tool in {"write_file", "apply_kubernetes_manifest"}
+    return tool in {"write_file", "apply_kubernetes_manifest", "git_clone", "git_commit", "git_push"}
 
 
 def create_proposal(tool: str, arguments: dict[str, Any], user: str, correlation_id: str) -> dict[str, Any]:

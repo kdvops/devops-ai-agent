@@ -49,6 +49,15 @@ Configuración mínima de `app/.env`:
 OPENAI_API_KEY=tu_api_key
 OPENAI_BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.5
+GIT_ALLOWED_HOSTS=github.com,gitlab.com,bitbucket.org
+GIT_USERNAME=x-access-token
+GIT_COMMIT_NAME=DevOps AI Agent
+GIT_COMMIT_EMAIL=devops-ai-agent@local.invalid
+# Opcional; preferir un Secret o helper de credenciales del entorno.
+GIT_TOKEN=
+GIT_PAT=
+GIT_API_KEY=
+GIT_PASSWORD=
 ```
 
 En desarrollo local Compose monta el kubeconfig del usuario en modo lectura:
@@ -74,9 +83,14 @@ Herramientas con cambio de estado:
 
 - `write_file`: propone escribir en el workspace.
 - `apply_kubernetes_manifest`: valida YAML, tipo, namespace y ejecuta dry-run antes de aplicar; permanece bloqueada con `KUBERNETES_READ_ONLY=true`.
+- `git_clone`: propone clonar un repositorio HTTPS de un host permitido en `/workspace`.
+- `git_status` y `git_diff`: inspeccionan un repositorio clonado.
+- `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios.
 
 No existe ejecución de shell arbitrario ni un endpoint para enviar tokens
 Kubernetes desde el frontend.
+Las operaciones Git tampoco aceptan comandos o flags arbitrarios; el token Git
+se inyecta como secreto de runtime y nunca se incluye en la URL.
 
 ## Kubernetes y Argo CD
 
@@ -101,7 +115,9 @@ Crear primero los secretos fuera de Git:
 ```powershell
 kubectl create namespace devops-ai
 kubectl create secret generic devops-ai-agent-secrets -n devops-ai `
-  --from-literal=OPENAI_API_KEY=$env:OPENAI_API_KEY
+  --from-literal=OPENAI_API_KEY=$env:OPENAI_API_KEY `
+  --from-literal=GIT_USERNAME="x-access-token" `
+  --from-literal=GIT_PAT=$env:GIT_PAT
 kubectl create secret generic devops-ai-data -n devops-ai `
   --from-literal=POSTGRES_PASSWORD="genera-un-secreto-fuerte"
 ```
@@ -134,14 +150,18 @@ ajústalo al dominio real.
 - `OPENAI_API_KEY`: Secret obligatorio.
 - `OPENAI_BASE_URL`: `https://api.openai.com/v1`.
 - `MODEL`: `gpt-5.5`.
+- `GIT_ALLOWED_HOSTS`: hosts HTTPS permitidos para clonar.
+- `GIT_USERNAME`: usuario HTTPS opcional; por defecto `x-access-token`.
+- `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`: una credencial HTTPS opcional para repositorios privados; se usa la primera disponible en ese orden.
+- `GIT_COMMIT_NAME` y `GIT_COMMIT_EMAIL`: identidad determinista usada al crear commits.
 - `KUBERNETES_READ_ONLY`: `true` por defecto.
-- `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas.
+- `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas; `*` habilita lectura en todos los namespaces.
 - `WORKSPACE_ROOT`: `/workspace`.
 - `DATABASE_URL`, `POSTGRES_PASSWORD` y `REDIS_URL`: persistencia/cola.
 
-El `ServiceAccount` tiene lectura de nodos a nivel de clúster y lectura de pods,
-logs y workloads dentro de `devops-ai`. Para consultar `argocd` u otro namespace
-hay que agregar explícitamente la autorización y el RBAC correspondiente.
+El `ServiceAccount` tiene lectura de nodos, pods, logs, eventos y workloads a
+nivel de clúster. El MVP mantiene `KUBERNETES_READ_ONLY=true` y no concede
+permisos de escritura Kubernetes.
 
 ## Pruebas
 
@@ -158,7 +178,8 @@ imprimir secretos.
 ## Estado del MVP
 
 Implementado: chat web, OpenAI Agents SDK, herramientas Kubernetes de lectura,
-workspace protegido, propuestas de cambio, Docker Compose, imágenes GHCR,
+workspace protegido, integración Git controlada para clonar/revisar/commit/push,
+propuestas de cambio, Docker Compose, imágenes GHCR,
 Kustomize, Argo CD, RBAC, NetworkPolicy, PostgreSQL/Redis y health checks.
 
 Pendiente antes de producción: OIDC/SSO y autorización por usuario, persistencia

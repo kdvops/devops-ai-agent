@@ -6,8 +6,12 @@ metadata:
 data:
   OPENAI_BASE_URL: "https://api.openai.com/v1"
   MODEL: "gpt-5.5"
+  GIT_ALLOWED_HOSTS: "github.com,gitlab.com,bitbucket.org"
+  GIT_USERNAME: "x-access-token"
+  GIT_COMMIT_NAME: "DevOps AI Agent"
+  GIT_COMMIT_EMAIL: "devops-ai-agent@local.invalid"
   KUBERNETES_READ_ONLY: "true"
-  ALLOWED_NAMESPACES: "devops-ai"
+  ALLOWED_NAMESPACES: "*"
   MAX_TOOL_RUNTIME_SECONDS: "15"
   WORKSPACE_ROOT: "/workspace"
   DATABASE_URL: "postgresql+asyncpg://devops@postgres:5432/devops_ai"

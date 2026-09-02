@@ -28,6 +28,7 @@ inmutables.
 - **Ejecucion aislada:** Kubernetes Jobs preparado para tareas largas.
 - **Servidores externos:** Ansible Runner preparado como adaptador.
 - **Contenedores:** Docker y Docker Compose para desarrollo.
+- **Git:** binario Git con URLs HTTPS y hosts permitidos; credenciales solo mediante runtime Secret.
 - **GitOps:** Kustomize con `base` y overlay `dev`, sincronizado por Argo CD.
 
 ## 3. Arquitectura vigente
@@ -109,8 +110,11 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 
 - `write_file(path, content)`: crea una propuesta; la escritura requiere confirmacion.
 - `apply_kubernetes_manifest(manifest)`: valida YAML, recursos permitidos y namespace; ejecuta dry-run de servidor y luego `kubectl apply` solo si el modo lectura esta desactivado y existe confirmacion.
+- `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
+- `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
+- `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
 
-No existe una tool de shell arbitrario ni una tool de eliminacion de recursos.
+No existe una tool de shell arbitrario, una tool de eliminacion de recursos ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales.
 
 ## 7. API HTTP
 
@@ -143,7 +147,7 @@ Requisitos implementados:
 - Filesystem de solo lectura en los deployments cuando aplica.
 - Secretos por variables de entorno y Kubernetes Secret.
 - Namespace y nombres Kubernetes validados.
-- `ALLOWED_NAMESPACES` limita consultas y manifiestos.
+- `ALLOWED_NAMESPACES` limita consultas y manifiestos; `*` habilita todos los namespaces.
 - Path traversal bloqueado fuera de `WORKSPACE_ROOT`.
 - Tipos de manifiesto restringidos a ConfigMap, Service, Deployment, StatefulSet y DaemonSet.
 - `KUBERNETES_READ_ONLY=true` por defecto.
@@ -191,9 +195,17 @@ Variables principales:
 | `OPENAI_API_KEY` | Si | Secret del proveedor LLM. |
 | `OPENAI_BASE_URL` | No | `https://api.openai.com/v1`. |
 | `MODEL` | No | `gpt-5.5`. |
+| `GIT_ALLOWED_HOSTS` | No | `github.com,gitlab.com,bitbucket.org`. |
+| `GIT_USERNAME` | No | Usuario runtime para autenticacion HTTPS. |
+| `GIT_PAT` | No | PAT runtime para clone/push HTTPS privado. |
+| `GIT_API_KEY` | No | API key runtime usada como password HTTPS. |
+| `GIT_PASSWORD` | No | Password runtime para clone/push HTTPS privado. |
+| `GIT_TOKEN` | No | Alias legado de credencial HTTPS; Secret, nunca Git. |
+| `GIT_COMMIT_NAME` | No | Identidad del autor de commits automáticos. |
+| `GIT_COMMIT_EMAIL` | No | Email del autor de commits automáticos. |
 | `KUBECONFIG` | Local | `/home/agent/.kube/config`. |
 | `KUBERNETES_READ_ONLY` | No | `true`. |
-| `ALLOWED_NAMESPACES` | Si | Lista separada por comas. |
+| `ALLOWED_NAMESPACES` | Si | Lista separada por comas; `*` habilita todos los namespaces. |
 | `WORKSPACE_ROOT` | Si | `/workspace`. |
 | `DATABASE_URL` | No | Conexion asyncpg a PostgreSQL. |
 | `POSTGRES_PASSWORD` | Kubernetes | Secret usado para completar la URL. |
@@ -293,6 +305,7 @@ la Application apunta a la ruta correcta.
 - Recursos CPU/memoria definidos en Kubernetes.
 - NetworkPolicy y ejecución no privilegiada.
 - No almacenar secretos en el repositorio.
+- Git remoto solo por HTTPS con hosts allowlisted y credenciales fuera de las URLs.
 - Respuesta de consultas simples objetivo menor a 10 segundos, excluyendo latencia externa del LLM.
 
 ## 15. Pruebas

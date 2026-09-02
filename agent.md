@@ -43,8 +43,12 @@ confirmación explícita.
 - Mantener `KUBERNETES_READ_ONLY=true` salvo una decisión explícita y revisada.
 - No convertir `X-User` en autenticación real: actualmente solo identifica al operador local.
 - Las escrituras de archivos y los manifiestos Kubernetes requieren propuesta y confirmación.
+- Clonar, hacer commit y hacer push requieren propuesta y confirmación; status y diff son de lectura.
+- Git solo acepta HTTPS y hosts definidos en `GIT_ALLOWED_HOSTS`; nunca usar credenciales en la URL.
+- `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`, junto con `GIT_USERNAME`, solo se inyectan en runtime mediante entorno o Secret.
+- Para HTTPS privado se usa la primera credencial disponible en este orden: PAT, API key, password, token legado.
 - No agregar secretos a Git, imágenes, manifests, logs ni documentación.
-- No ampliar RBAC o `ALLOWED_NAMESPACES` sin justificar el alcance.
+- El acceso de lectura Kubernetes es cluster-wide para diagnostico; no conceder permisos de escritura sin una decision explicita.
 
 ## Desarrollo local
 
@@ -71,8 +75,12 @@ debe funcionar también con `kubectl` en el host.
 - `MODEL`: `gpt-5.5` por defecto.
 - `KUBECONFIG`: solo desarrollo local.
 - `KUBERNETES_READ_ONLY`: `true` por defecto.
-- `ALLOWED_NAMESPACES`: lista separada por comas.
+- `ALLOWED_NAMESPACES`: lista separada por comas; `*` habilita todos los namespaces.
 - `WORKSPACE_ROOT`: raíz autorizada para operaciones de archivos.
+- `GIT_ALLOWED_HOSTS`: hosts Git remotos HTTPS autorizados.
+- `GIT_USERNAME`: usuario runtime opcional para Git HTTPS.
+- `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD`, `GIT_TOKEN`: credenciales runtime para clone/push HTTPS privado.
+- `GIT_COMMIT_NAME`, `GIT_COMMIT_EMAIL`: identidad usada para commits automáticos.
 - `DATABASE_URL`, `POSTGRES_PASSWORD` y `REDIS_URL`: persistencia y cola.
 
 ## Kubernetes y Argo CD
@@ -134,5 +142,6 @@ Antes de cerrar un cambio:
 - `X-User` no reemplaza autenticación OIDC/SSO.
 - Las tablas PostgreSQL están definidas, pero la conversación, ejecución y aprobación aún no se persisten de forma completa.
 - El worker Redis, Kubernetes Jobs y Ansible Runner son bases de integración, no un flujo operativo completo.
+- La integración Git trabaja con repositorios bajo `/workspace/repos`; aún no implementa pull/rebase, ramas remotas avanzadas ni autenticación SSH.
 - El overlay `dev` usa `latest`; no es una estrategia de promoción reproducible para producción.
 - PostgreSQL y Redis dentro de los manifiestos son adecuados para MVP/dev, no una topología HA.

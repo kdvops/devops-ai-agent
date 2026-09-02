@@ -41,6 +41,30 @@ spec:
                 secretKeyRef:
                   name: devops-ai-data
                   key: POSTGRES_PASSWORD
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: GIT_TOKEN
+                  optional: true
+            - name: GIT_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: GIT_PAT
+                  optional: true
+            - name: GIT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: GIT_API_KEY
+                  optional: true
+            - name: GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: GIT_PASSWORD
+                  optional: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
