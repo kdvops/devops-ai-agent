@@ -55,7 +55,7 @@ class ChatRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    tool: Literal["cluster_status", "list_pods", "get_workload", "get_pod_logs", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_commit", "git_push"]
+    tool: Literal["cluster_status", "list_pods", "get_workload", "get_pod_logs", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -98,6 +98,9 @@ LLM_TOOLS = [
     {"type": "function", "name": "git_diff", "description": "Consulta el diff de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_commit", "description": "Propone crear un commit de los cambios del repositorio; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "message": {"type": "string"}}, "required": ["repo_path", "message"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_push", "description": "Propone enviar una rama al remoto origin; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "http_request", "description": "Consulta una URL HTTP(S) autorizada con GET o HEAD, equivalente a curl de solo lectura.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "method": {"type": "string", "enum": ["GET", "HEAD"]}}, "required": ["url", "method"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "ssh_command", "description": "Propone ejecutar un comando de diagnóstico permitido en un host SSH autorizado; requiere confirmación.", "parameters": {"type": "object", "properties": {"host": {"type": "string"}, "port": {"type": ["integer", "null"]}, "username": {"type": ["string", "null"]}, "command": {"type": "string"}}, "required": ["host", "port", "username", "command"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "browser_inspect", "description": "Propone abrir una URL autorizada con Playwright y devolver título, estado y texto visible; requiere confirmación.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "selector": {"type": ["string", "null"]}}, "required": ["url", "selector"], "additionalProperties": False}, "strict": True},
 ]
 
 AGENT_INSTRUCTIONS = """Eres un agente DevOps responsable y preciso. Responde en español.
@@ -204,6 +207,18 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         except RuntimeError as exc:
             raise HTTPException(502, str(exc)) from exc
         raise HTTPException(422, "Herramienta Git no soportada.")
+    if tool in {"http_request", "ssh_command", "browser_inspect"}:
+        from integrations import external_tools
+        try:
+            if tool == "http_request":
+                return external_tools.http_request(arguments, settings.max_tool_runtime_seconds)
+            if tool == "ssh_command":
+                return external_tools.ssh_command(arguments, settings.max_tool_runtime_seconds)
+            return external_tools.browser_inspect(arguments, settings.max_tool_runtime_seconds)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
     if tool == "cluster_status":
         from integrations.kubernetes_client import read_tool
         return read_tool(tool, arguments, validate_namespace, validate_name)
@@ -258,7 +273,7 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def requires_confirmation(tool: str) -> bool:
-    return tool in {"write_file", "apply_kubernetes_manifest", "git_clone", "git_commit", "git_push"}
+    return tool in {"write_file", "apply_kubernetes_manifest", "git_clone", "git_commit", "git_push", "ssh_command", "browser_inspect"}
 
 
 def create_proposal(tool: str, arguments: dict[str, Any], user: str, correlation_id: str) -> dict[str, Any]:

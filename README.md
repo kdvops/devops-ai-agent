@@ -86,11 +86,21 @@ Herramientas con cambio de estado:
 - `git_clone`: propone clonar un repositorio HTTPS de un host permitido en `/workspace`.
 - `git_status` y `git_diff`: inspeccionan un repositorio clonado.
 - `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios.
+- `http_request`: consulta URLs HTTP(S) autorizadas con `GET` o `HEAD`, equivalente a `curl` de solo lectura.
+- `ssh_command`: ejecuta comandos de diagnóstico permitidos en hosts SSH autorizados y requiere confirmación.
+- `browser_inspect`: abre una página autorizada con Playwright y devuelve estado, título y texto visible; requiere confirmación.
 
 No existe ejecución de shell arbitrario ni un endpoint para enviar tokens
 Kubernetes desde el frontend.
 Las operaciones Git tampoco aceptan comandos o flags arbitrarios; el token Git
 se inyecta como secreto de runtime y nunca se incluye en la URL.
+
+Las herramientas externas están cerradas por allowlist. Configura
+`EXTERNAL_HTTP_ALLOWED_HOSTS` y `BROWSER_ALLOWED_HOSTS` con hosts exactos. Para
+SSH configura `SSH_ALLOWED_HOSTS`, `SSH_USERNAME` y una clave privada montada en
+`SSH_PRIVATE_KEY_PATH` o `SSH_PASSWORD`; la verificación de host permanece activa
+con `SSH_STRICT_HOST_KEY_CHECKING=true`. Los comandos se limitan mediante
+`SSH_ALLOWED_COMMANDS` y no aceptan metacaracteres de shell.
 
 ## Kubernetes y Argo CD
 
@@ -121,6 +131,11 @@ kubectl create secret generic devops-ai-agent-secrets -n devops-ai `
 kubectl create secret generic devops-ai-data -n devops-ai `
   --from-literal=POSTGRES_PASSWORD="genera-un-secreto-fuerte"
 ```
+
+El overlay `app/k8s/overlays/dev` incluye `secrets-dummy.yaml` para facilitar
+pruebas de Argo CD. Esas credenciales son intencionalmente falsas y no deben
+usarse fuera de desarrollo/QA; reemplázalas por Secrets gestionados fuera de Git
+antes de desplegar en un entorno real.
 
 Registrar la aplicación en Argo CD:
 

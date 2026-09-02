@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: devops-ai
 resources:
   - ../../base
+  - secrets-dummy.yaml
 patches:
   - path: ingress-patch.yaml
   - path: storage-patch.yaml

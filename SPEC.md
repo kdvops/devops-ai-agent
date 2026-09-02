@@ -29,6 +29,7 @@ inmutables.
 - **Servidores externos:** Ansible Runner preparado como adaptador.
 - **Contenedores:** Docker y Docker Compose para desarrollo.
 - **Git:** binario Git con URLs HTTPS y hosts permitidos; credenciales solo mediante runtime Secret.
+- **Automatizacion externa:** HTTP(S) de solo lectura, SSH restringido y Playwright headless con allowlists.
 - **GitOps:** Kustomize con `base` y overlay `dev`, sincronizado por Argo CD.
 
 ## 3. Arquitectura vigente
@@ -113,12 +114,17 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 - `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
 - `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
+- `http_request(url, method)`: `GET`/`HEAD` contra hosts en `EXTERNAL_HTTP_ALLOWED_HOSTS`; limita la respuesta a 50 KiB.
+- `ssh_command(host, port, username, command)`: requiere confirmacion, host en `SSH_ALLOWED_HOSTS` y comando con prefijo permitido.
+- `browser_inspect(url, selector?)`: requiere confirmacion, usa Playwright y limita el texto a 50 KiB.
 
 El chat acepta hasta tres imagenes JPEG, PNG, WebP o GIF de hasta 5 MiB cada
 una. El backend valida los data URLs y los entrega al modelo como `input_image`
 junto al prompt textual; no persiste ni registra el contenido de la imagen.
 
 No existe una tool de shell arbitrario, una tool de eliminacion de recursos ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales.
+Las herramientas SSH y navegador tampoco permiten credenciales en los argumentos:
+se obtienen exclusivamente del entorno o de secretos montados en runtime.
 
 ## 7. API HTTP
 
@@ -215,6 +221,12 @@ Variables principales:
 | `POSTGRES_PASSWORD` | Kubernetes | Secret usado para completar la URL. |
 | `REDIS_URL` | No | Conexion Redis. |
 | `PERSISTENCE_ENABLED` | No | `true` en Compose/Kubernetes. |
+| `EXTERNAL_HTTP_ALLOWED_HOSTS` | No | Hosts exactos para `http_request`. |
+| `BROWSER_ALLOWED_HOSTS` | No | Hosts exactos para `browser_inspect`. |
+| `SSH_ALLOWED_HOSTS` | No | Hosts exactos para SSH. |
+| `SSH_ALLOWED_COMMANDS` | No | Prefijos de comandos de diagnostico separados por comas. |
+| `SSH_PRIVATE_KEY_PATH` | No | Ruta de la clave privada montada en runtime. |
+| `SSH_KNOWN_HOSTS` | No | Archivo de hosts conocidos para verificacion SSH. |
 
 ## 11. Despliegue Kubernetes y GitOps
 
@@ -236,6 +248,10 @@ Antes de sincronizar deben existir fuera de Git:
 
 - `devops-ai-agent-secrets/OPENAI_API_KEY`.
 - `devops-ai-data/POSTGRES_PASSWORD`.
+
+Para desarrollo, el overlay incluye `app/k8s/overlays/dev/secrets-dummy.yaml`
+con valores falsos que permiten validar la instalación completa. Ese archivo no
+es una estrategia de gestión de secretos para producción.
 - `imagePullSecret` si los paquetes GHCR son privados.
 
 Las imagenes publicadas son:

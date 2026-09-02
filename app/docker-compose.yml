@@ -22,6 +22,15 @@ services:
       GIT_PAT: ${GIT_PAT:-}
       GIT_API_KEY: ${GIT_API_KEY:-}
       GIT_PASSWORD: ${GIT_PASSWORD:-}
+      EXTERNAL_HTTP_ALLOWED_HOSTS: ${EXTERNAL_HTTP_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      BROWSER_ALLOWED_HOSTS: ${BROWSER_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      SSH_ALLOWED_HOSTS: ${SSH_ALLOWED_HOSTS:-}
+      SSH_ALLOWED_COMMANDS: ${SSH_ALLOWED_COMMANDS:-uname,uptime,hostname,whoami,df,free,systemctl status,docker ps,kubectl get,kubectl describe}
+      SSH_USERNAME: ${SSH_USERNAME:-}
+      SSH_PASSWORD: ${SSH_PASSWORD:-}
+      SSH_PRIVATE_KEY_PATH: ${SSH_PRIVATE_KEY_PATH:-}
+      SSH_KNOWN_HOSTS: ${SSH_KNOWN_HOSTS:-}
+      SSH_STRICT_HOST_KEY_CHECKING: ${SSH_STRICT_HOST_KEY_CHECKING:-true}
       KUBECONFIG: /home/agent/.kube/config
       WORKSPACE_ROOT: /workspace
       KUBERNETES_READ_ONLY: "true"

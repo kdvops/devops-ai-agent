@@ -45,3 +45,25 @@ def test_git_remote_requires_allowed_host() -> None:
 
     with pytest.raises(ValueError):
         _validate_remote("https://evil.example/acme/app.git", {"github.com"})
+
+
+def test_external_http_rejects_unapproved_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    from integrations.external_tools import http_request
+
+    monkeypatch.setenv("EXTERNAL_HTTP_ALLOWED_HOSTS", "example.com")
+    with pytest.raises(ValueError):
+        http_request({"url": "https://evil.example/health", "method": "GET"}, 5)
+
+
+def test_ssh_rejects_shell_metacharacters(monkeypatch: pytest.MonkeyPatch) -> None:
+    from integrations.external_tools import ssh_command
+
+    monkeypatch.setenv("SSH_ALLOWED_HOSTS", "server.example")
+    with pytest.raises(ValueError):
+        ssh_command({"host": "server.example", "username": "operator", "command": "uname; cat /etc/passwd"}, 5)
+
+
+def test_stateful_external_tools_require_confirmation() -> None:
+    assert main.requires_confirmation("ssh_command")
+    assert main.requires_confirmation("browser_inspect")
+    assert not main.requires_confirmation("http_request")

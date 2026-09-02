@@ -3,9 +3,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends git kubernetes-
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium
 COPY main.py agent.py persistence.py app_queue.py worker.py index.html ./
 COPY integrations ./integrations
-RUN useradd --create-home --uid 10001 agent && mkdir /workspace && chown agent:agent /workspace
+RUN useradd --create-home --uid 10001 agent && mkdir /workspace && chown -R agent:agent /workspace /ms-playwright
 USER 10001
 ENV WORKSPACE_ROOT=/workspace KUBERNETES_READ_ONLY=true ALLOWED_NAMESPACES=*
 EXPOSE 8080

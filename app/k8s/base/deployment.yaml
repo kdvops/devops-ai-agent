@@ -65,6 +65,12 @@ spec:
                   name: devops-ai-agent-secrets
                   key: GIT_PASSWORD
                   optional: true
+            - name: SSH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: SSH_PASSWORD
+                  optional: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
