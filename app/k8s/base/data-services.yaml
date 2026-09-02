@@ -34,6 +34,8 @@ spec:
               value: devops
             - name: POSTGRES_DB
               value: devops_ai
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
