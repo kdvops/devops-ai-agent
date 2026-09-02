@@ -16,6 +16,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: devops-ai
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: postgres
+      namespace: devops-ai
+      jsonPointers:
+        - /spec/volumeClaimTemplates
   syncPolicy:
     automated:
       selfHeal: true
@@ -23,3 +30,4 @@ spec:
     syncOptions:
       - CreateNamespace=false
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
