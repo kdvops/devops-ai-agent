@@ -3,6 +3,9 @@ kind: Kustomization
 namespace: devops-ai
 resources:
   - ../../base
+patches:
+  - path: ingress-patch.yaml
+  - path: storage-patch.yaml
 images:
   - name: ghcr.io/kdvops/devops-ai-agent
     newTag: latest
