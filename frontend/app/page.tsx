@@ -6,6 +6,8 @@ type Role = "user" | "assistant";
 type ImageAttachment = { name: string; type: string; dataUrl: string };
 type Message = { role: Role; content: string; time: string; image?: ImageAttachment };
 type ChatResult = { reply?: string; status?: string; proposal_id?: string; tool?: string; arguments?: unknown; result?: unknown; detail?: string };
+const HISTORY_KEY = "devops-ai-agent-chat-history";
+const welcomeMessage: Message = { role: "assistant", content: "Estoy listo para ayudarte a entender y operar tu infraestructura. Puedo consultar Kubernetes, inspeccionar repositorios y proponer cambios controlados.", time: "" };
 
 const suggestions = [
   { label: "Estado del cluster", prompt: "Consulta el estado de los nodos del cluster." },
@@ -15,6 +17,23 @@ const suggestions = [
 
 function now() {
   return new Intl.DateTimeFormat("es-DO", { hour: "2-digit", minute: "2-digit" }).format(new Date());
+}
+
+function storedMessages(): Message[] | null {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const valid = parsed.filter((item): item is Message => {
+      if (!item || typeof item !== "object") return false;
+      const message = item as Partial<Message>;
+      return (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && typeof message.time === "string";
+    });
+    return valid.length ? valid.slice(-100) : null;
+  } catch {
+    return null;
+  }
 }
 
 function Icon({ name }: { name: "grid" | "pulse" | "shield" | "arrow" | "spark" | "send" | "check" | "x" }) {
@@ -32,7 +51,8 @@ function Icon({ name }: { name: "grid" | "pulse" | "shield" | "arrow" | "spark" 
 }
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estoy listo para ayudarte a entender y operar tu infraestructura. Puedo consultar Kubernetes, inspeccionar repositorios y proponer cambios controlados.", time: now() }]);
+  const [messages, setMessages] = useState<Message[]>([{ ...welcomeMessage, time: now() }]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState<ChatResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,6 +64,21 @@ export default function Home() {
   useEffect(() => {
     fetch(`${api}/health`).then((response) => setOnline(response.ok)).catch(() => setOnline(false));
   }, [api]);
+
+  useEffect(() => {
+    const saved = storedMessages();
+    if (saved) setMessages(saved);
+    setHistoryReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!historyReady) return;
+    try {
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-100)));
+    } catch {
+      // A large image can exceed browser storage; keep the live chat usable.
+    }
+  }, [historyReady, messages]);
 
   function chooseImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -67,10 +102,11 @@ export default function Home() {
     const value = input.trim();
     if (!value || busy) return;
     setInput("");
-    setMessages((current) => [...current, { role: "user", content: value, time: now(), image: selectedImage ?? undefined }]);
+    const userMessage: Message = { role: "user", content: value, time: now(), image: selectedImage ?? undefined };
+    setMessages((current) => [...current, userMessage]);
     setBusy(true);
     try {
-      const response = await fetch(`${api}/chat`, { method: "POST", headers: { "content-type": "application/json", "x-user": "operator-local" }, body: JSON.stringify({ message: value, images: selectedImage ? [selectedImage.dataUrl] : [], history: messages.map(({ role, content }) => ({ role, content })) }) });
+      const response = await fetch(`${api}/chat`, { method: "POST", headers: { "content-type": "application/json", "x-user": "operator-local" }, body: JSON.stringify({ message: value, images: selectedImage ? [selectedImage.dataUrl] : [], history: [...messages, userMessage].map(({ role, content }) => ({ role, content })) }) });
       const result: ChatResult = await response.json();
       if (!response.ok) throw new Error(result.detail || result.reply || "No se pudo completar la solicitud.");
       setMessages((current) => [...current, { role: "assistant", content: result.reply || "La operación fue procesada.", time: now() }]);
@@ -94,6 +130,13 @@ export default function Home() {
     } finally { setBusy(false); }
   }
 
+  function clearHistory() {
+    if (busy) return;
+    setMessages([{ ...welcomeMessage, time: now() }]);
+    setPending(null);
+    window.localStorage.removeItem(HISTORY_KEY);
+  }
+
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Icon name="spark" /></div><div><strong>DevOps AI</strong><span>control plane</span></div></div>
@@ -101,7 +144,7 @@ export default function Home() {
       <div className="sidebar-bottom"><div className="mini-card"><span className="mini-label">ENTORNO ACTIVO</span><strong>K3s · desarrollo</strong><span className="mini-status"><i /> Conectado</span></div><div className="sidebar-foot"><span className="avatar">OL</span><span>operator-local</span><span className="dots">•••</span></div></div>
     </aside>
     <section className="workspace">
-      <header className="topbar"><div><p className="breadcrumb">WORKSPACE <span>/</span> ASISTENTE</p><h1>Centro de operaciones</h1></div><div className={`connection ${online === false ? "offline" : ""}`}><i /> {online === null ? "verificando" : online ? "sistema operativo" : "sin conexión"}</div></header>
+      <header className="topbar"><div><p className="breadcrumb">WORKSPACE <span>/</span> ASISTENTE</p><h1>Centro de operaciones</h1></div><div className="topbar-actions"><button className="clear-history" onClick={clearHistory} disabled={busy}>Nueva conversación</button><div className={`connection ${online === false ? "offline" : ""}`}><i /> {online === null ? "verificando" : online ? "sistema operativo" : "sin conexión"}</div></div></header>
       <div className="content-grid">
         <section className="chat-panel">
           <div className="panel-heading"><div><span className="section-kicker">ASISTENTE INTELIGENTE</span><h2>¿Qué quieres revisar?</h2></div><span className="secure-pill"><Icon name="shield" /> acciones protegidas</span></div>
