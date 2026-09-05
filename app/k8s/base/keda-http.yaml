@@ -1,0 +1,57 @@
+apiVersion: http.keda.sh/v1beta1
+kind: InterceptorRoute
+metadata:
+  name: devops-ai-agent
+  namespace: devops-ai
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  target:
+    service: devops-ai-agent-frontend
+    port: 80
+  rules:
+    - hosts:
+        - devops-ai.example.com
+  scalingMetric:
+    concurrency:
+      targetValue: 10
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: devops-ai-agent
+  namespace: devops-ai
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  scaleTargetRef:
+    name: devops-ai-agent-frontend
+    kind: Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 2
+  cooldownPeriod: 300
+  triggers:
+    - type: external-push
+      metadata:
+        scalerAddress: keda-add-ons-http-external-scaler.keda:9090
+        interceptorRoute: devops-ai-agent
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: devops-ai-agent-api
+  namespace: devops-ai
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  scaleTargetRef:
+    name: devops-ai-agent
+    kind: Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 2
+  cooldownPeriod: 300
+  triggers:
+    - type: external-push
+      metadata:
+        scalerAddress: keda-add-ons-http-external-scaler.keda:9090
+        interceptorRoute: devops-ai-agent
