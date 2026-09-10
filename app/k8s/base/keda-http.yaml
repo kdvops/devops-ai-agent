@@ -27,7 +27,7 @@ spec:
   scaleTargetRef:
     name: devops-ai-agent-frontend
     kind: Deployment
-  minReplicaCount: 0
+  minReplicaCount: 1
   maxReplicaCount: 2
   cooldownPeriod: 300
   triggers:
@@ -47,7 +47,7 @@ spec:
   scaleTargetRef:
     name: devops-ai-agent
     kind: Deployment
-  minReplicaCount: 0
+  minReplicaCount: 1
   maxReplicaCount: 2
   cooldownPeriod: 300
   triggers:
