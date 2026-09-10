@@ -5,6 +5,8 @@ metadata:
   namespace: devops-ai
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: devops-ai-agent
