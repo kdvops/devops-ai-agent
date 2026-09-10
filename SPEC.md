@@ -257,7 +257,8 @@ frontend, worker, PostgreSQL, Redis, Ingress, NetworkPolicy y PVC del workspace.
 
 Argo CD usa `app/argocd/application-dev.yaml`, apunta a la rama `main` y
 sincroniza `app/k8s/overlays/dev`. El `AppProject` restringe el repositorio y el
-namespace de destino. `selfHeal` esta activo y `prune` esta desactivado.
+namespace de destino. `selfHeal` esta activo y `prune` esta desactivado; los
+recursos se retiran mediante un cambio explícito y revisable en Git.
 
 Antes de sincronizar deben existir fuera de Git:
 

@@ -153,7 +153,8 @@ kubectl apply -n argocd -f app/argocd/project.yaml
 kubectl apply -n argocd -f app/argocd/application-dev.yaml
 ```
 
-Argo CD sincroniza la rama `main`, aplica self-heal y mantiene `prune: false`.
+Argo CD sincroniza la rama `main`, aplica self-heal y mantiene `prune: false`;
+los recursos se retiran mediante un cambio explícito y revisable en Git.
 Las imágenes son `ghcr.io/kdvops/devops-ai-agent` y
 `ghcr.io/kdvops/devops-ai-agent-ui`. Los workflows publican `latest` y `sha-*`.
 El overlay dev usa `latest` para el MVP; producción debe usar tags inmutables o
