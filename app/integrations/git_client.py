@@ -103,6 +103,16 @@ def diff(workspace_root: Path, repo_path: str, timeout: int) -> dict:
     return {"repo_path": repo_path, "diff": _run_git(["diff", "--no-ext-diff", "--", "."], repo, timeout)}
 
 
+def pull_rebase(workspace_root: Path, repo_path: str, branch: str | None, timeout: int) -> dict:
+    """Synchronize a repository without overwriting uncommitted work."""
+    repo = _repo(workspace_root, repo_path)
+    branch = _validate_branch(branch) or _run_git(["branch", "--show-current"], repo, timeout)
+    if not branch:
+        raise ValueError("No hay una rama activa para sincronizar.")
+    output = _run_git(["pull", "--rebase", "origin", branch], repo, timeout)
+    return {"repo_path": repo_path, "branch": branch, "output": output or "Repositorio sincronizado."}
+
+
 def _askpass_environment() -> tuple[dict[str, str], Path | None]:
     # PAT, API key, password and the legacy token are all Git HTTPS passwords.
     password = next((os.getenv(name) for name in ("GIT_PAT", "GIT_API_KEY", "GIT_PASSWORD", "GIT_TOKEN") if os.getenv(name)), None)

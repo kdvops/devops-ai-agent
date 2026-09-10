@@ -33,7 +33,7 @@ services:
       SSH_STRICT_HOST_KEY_CHECKING: ${SSH_STRICT_HOST_KEY_CHECKING:-true}
       KUBECONFIG: /home/agent/.kube/config
       WORKSPACE_ROOT: /workspace
-      KUBERNETES_READ_ONLY: "true"
+      KUBERNETES_READ_ONLY: "false"
       ALLOWED_NAMESPACES: "*"
       DATABASE_URL: postgresql+asyncpg://devops:devops@postgres:5432/devops_ai
       REDIS_URL: redis://redis:6379/0

@@ -74,17 +74,25 @@ Kubernetes, usa `KUBECONFIG`/kubeconfig local.
 Herramientas de lectura disponibles:
 
 - `cluster_status`: nodos del clúster.
+- `list_namespaces`: namespaces visibles.
 - `list_pods`: pods de un namespace autorizado.
+- `list_events`: eventos de un namespace para diagnóstico.
+- `get_pod`: estado y configuración de un pod.
 - `get_workload`: Deployments, StatefulSets y DaemonSets.
-- `get_pod_logs`: logs recientes de un pod autorizado.
+- `get_pod_logs`: logs recientes de un pod autorizado, incluido el contenedor anterior.
+- `rollout_status`: estado de rollout de un workload.
 - `list_files` y `read_file`: workspace autorizado.
 
 Herramientas con cambio de estado:
 
 - `write_file`: propone escribir en el workspace.
 - `apply_kubernetes_manifest`: valida YAML, tipo, namespace y ejecuta dry-run antes de aplicar; permanece bloqueada con `KUBERNETES_READ_ONLY=true`.
+- `scale_workload`: cambia réplicas de Deployments o StatefulSets con confirmación.
+- `restart_workload`: reinicia un Deployment, StatefulSet o DaemonSet con confirmación.
+- `delete_pod`: elimina un pod para que su controlador lo recree, con confirmación.
 - `git_clone`: propone clonar un repositorio HTTPS de un host permitido en `/workspace`.
 - `git_status` y `git_diff`: inspeccionan un repositorio clonado.
+- `git_pull_rebase`: propone sincronizar la rama con `origin` antes de publicar cambios.
 - `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios.
 - `http_request`: consulta URLs HTTP(S) autorizadas con `GET` o `HEAD`, equivalente a `curl` de solo lectura.
 - `ssh_command`: ejecuta comandos de diagnóstico permitidos en hosts SSH autorizados y requiere confirmación.
@@ -169,14 +177,16 @@ ajústalo al dominio real.
 - `GIT_USERNAME`: usuario HTTPS opcional; por defecto `x-access-token`.
 - `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`: una credencial HTTPS opcional para repositorios privados; se usa la primera disponible en ese orden.
 - `GIT_COMMIT_NAME` y `GIT_COMMIT_EMAIL`: identidad determinista usada al crear commits.
-- `KUBERNETES_READ_ONLY`: `true` por defecto.
+- `KUBERNETES_READ_ONLY`: `true` por defecto en el código; el manifiesto de despliegue lo establece en `false` para habilitar operaciones confirmadas.
 - `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas; `*` habilita lectura en todos los namespaces.
 - `WORKSPACE_ROOT`: `/workspace`.
 - `DATABASE_URL`, `POSTGRES_PASSWORD` y `REDIS_URL`: persistencia/cola.
 
-El `ServiceAccount` tiene lectura de nodos, pods, logs, eventos y workloads a
-nivel de clúster. El MVP mantiene `KUBERNETES_READ_ONLY=true` y no concede
-permisos de escritura Kubernetes.
+El `ServiceAccount` tiene lectura de nodos, pods, logs, eventos, namespaces y
+workloads, además de permisos namespaced para aplicar componentes operativos y
+ejecutar acciones de recuperación. Los cambios se validan en el backend y
+requieren confirmación humana; no se conceden permisos para modificar RBAC ni
+otros recursos de control del clúster.
 
 ## Pruebas
 

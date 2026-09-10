@@ -22,13 +22,46 @@ def test_rejects_unapproved_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_write_action_requires_confirmation() -> None:
     assert main.requires_confirmation("write_file")
+    assert main.requires_confirmation("scale_workload")
+    assert main.requires_confirmation("restart_workload")
+    assert main.requires_confirmation("delete_pod")
     assert not main.requires_confirmation("list_pods")
+
+
+def test_manifest_allows_namespaced_operational_components() -> None:
+    main.validate_manifest("""
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migration
+  namespace: devops-ai
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: example/migration:1
+""")
+
+
+def test_manifest_rejects_cluster_scoped_resources() -> None:
+    with pytest.raises(HTTPException) as error:
+        main.validate_manifest("""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: unsafe-role
+rules: []
+""")
+    assert error.value.status_code == 403
 
 
 def test_git_state_changes_require_confirmation() -> None:
     assert main.requires_confirmation("git_clone")
     assert main.requires_confirmation("git_commit")
     assert main.requires_confirmation("git_push")
+    assert main.requires_confirmation("git_pull_rebase")
     assert not main.requires_confirmation("git_status")
     assert not main.requires_confirmation("git_diff")
 

@@ -55,7 +55,7 @@ class ChatRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    tool: Literal["cluster_status", "list_pods", "get_workload", "get_pod_logs", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
+    tool: Literal["cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status", "scale_workload", "restart_workload", "delete_pod", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_pull_rebase", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -86,9 +86,16 @@ async def initialize_persistence() -> None:
 
 LLM_TOOLS = [
     {"type": "function", "name": "cluster_status", "description": "Consulta nodos y estado general del clúster Kubernetes.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "list_namespaces", "description": "Lista namespaces visibles del clúster.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "list_pods", "description": "Lista pods autorizados de un namespace.", "parameters": {"type": "object", "properties": {"namespace": {"type": "string"}}, "required": ["namespace"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "list_events", "description": "Consulta eventos de un namespace para diagnosticar fallas.", "parameters": {"type": "object", "properties": {"namespace": {"type": "string"}}, "required": ["namespace"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "get_pod", "description": "Obtiene el estado y la configuración de un pod.", "parameters": {"type": "object", "properties": {"pod": {"type": "string"}, "namespace": {"type": "string"}}, "required": ["pod", "namespace"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "get_workload", "description": "Obtiene un Deployment, StatefulSet o DaemonSet.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["deployment", "statefulset", "daemonset"]}, "name": {"type": "string"}, "namespace": {"type": "string"}}, "required": ["kind", "name", "namespace"], "additionalProperties": False}, "strict": True},
-    {"type": "function", "name": "get_pod_logs", "description": "Consulta hasta 200 líneas de logs de un pod autorizado.", "parameters": {"type": "object", "properties": {"pod": {"type": "string"}, "namespace": {"type": "string"}, "container": {"type": ["string", "null"]}}, "required": ["pod", "namespace", "container"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "get_pod_logs", "description": "Consulta logs recientes de un pod autorizado, incluyendo el contenedor anterior si se solicita.", "parameters": {"type": "object", "properties": {"pod": {"type": "string"}, "namespace": {"type": "string"}, "container": {"type": ["string", "null"]}, "tail_lines": {"type": "integer"}, "previous": {"type": "boolean"}}, "required": ["pod", "namespace", "container", "tail_lines", "previous"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "rollout_status", "description": "Consulta el estado de rollout de un workload.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["deployment", "statefulset", "daemonset"]}, "name": {"type": "string"}, "namespace": {"type": "string"}}, "required": ["kind", "name", "namespace"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "scale_workload", "description": "Propone cambiar las réplicas de un Deployment o StatefulSet; requiere confirmación.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["deployment", "statefulset"]}, "name": {"type": "string"}, "namespace": {"type": "string"}, "replicas": {"type": "integer"}}, "required": ["kind", "name", "namespace", "replicas"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "restart_workload", "description": "Propone reiniciar un workload mediante una actualización controlada; requiere confirmación.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["deployment", "statefulset", "daemonset"]}, "name": {"type": "string"}, "namespace": {"type": "string"}}, "required": ["kind", "name", "namespace"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "delete_pod", "description": "Propone eliminar un pod para permitir su recreación por el controlador; requiere confirmación.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "namespace": {"type": "string"}}, "required": ["name", "namespace"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "list_files", "description": "Lista archivos dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "read_file", "description": "Lee un archivo dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "write_file", "description": "Crea o modifica un archivo autorizado. Siempre requiere confirmación del usuario.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}, "strict": True},
@@ -96,6 +103,7 @@ LLM_TOOLS = [
     {"type": "function", "name": "git_clone", "description": "Propone clonar un repositorio HTTPS autorizado dentro del workspace.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["url", "repo_path", "branch"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_status", "description": "Consulta la rama y cambios de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_diff", "description": "Consulta el diff de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_pull_rebase", "description": "Propone sincronizar el repositorio con origin mediante rebase; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_commit", "description": "Propone crear un commit de los cambios del repositorio; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "message": {"type": "string"}}, "required": ["repo_path", "message"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_push", "description": "Propone enviar una rama al remoto origin; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "http_request", "description": "Consulta una URL HTTP(S) autorizada con GET o HEAD, equivalente a curl de solo lectura.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "method": {"type": "string", "enum": ["GET", "HEAD"]}}, "required": ["url", "method"], "additionalProperties": False}, "strict": True},
@@ -161,13 +169,15 @@ def validate_manifest(manifest: str) -> None:
         raise HTTPException(422, "El manifiesto YAML no es válido.") from exc
     if not documents:
         raise HTTPException(422, "El manifiesto no contiene recursos.")
-    allowed_kinds = {"configmap", "service", "deployment", "statefulset", "daemonset"}
+    allowed_kinds = {"configmap", "service", "deployment", "statefulset", "daemonset", "job", "cronjob", "ingress", "horizontalpodautoscaler", "poddisruptionbudget"}
     for document in documents:
         if not isinstance(document, dict) or document.get("kind", "").lower() not in allowed_kinds:
             raise HTTPException(403, "El manifiesto contiene un tipo de recurso no permitido.")
         metadata = document.get("metadata", {})
         if not isinstance(metadata, dict):
             raise HTTPException(422, "Los metadatos del manifiesto no son válidos.")
+        if not RESOURCE_NAME.fullmatch(str(metadata.get("name", ""))):
+            raise HTTPException(422, "El nombre del recurso no es válido.")
         validate_namespace(metadata.get("namespace"))
 
 
@@ -198,6 +208,8 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 return git_client.status(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
             if tool == "git_diff":
                 return git_client.diff(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
+            if tool == "git_pull_rebase":
+                return git_client.pull_rebase(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds)
             if tool == "git_commit":
                 return git_client.commit(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("message", ""), settings.max_tool_runtime_seconds)
             if tool == "git_push":
@@ -219,21 +231,17 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(422, str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(502, str(exc)) from exc
-    if tool == "cluster_status":
+    if tool in {"cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status"}:
         from integrations.kubernetes_client import read_tool
         return read_tool(tool, arguments, validate_namespace, validate_name)
-    if tool == "list_pods":
-        from integrations.kubernetes_client import read_tool
-        return read_tool(tool, arguments, validate_namespace, validate_name)
-    if tool == "get_workload":
-        kind = arguments.get("kind", "deployment").lower()
-        if kind not in {"deployment", "statefulset", "daemonset"}:
-            raise HTTPException(422, "Tipo de workload no permitido.")
-        from integrations.kubernetes_client import read_tool
-        return read_tool(tool, arguments, validate_namespace, validate_name)
-    if tool == "get_pod_logs":
-        from integrations.kubernetes_client import read_tool
-        return read_tool(tool, arguments, validate_namespace, validate_name)
+    if tool in {"scale_workload", "restart_workload", "delete_pod"}:
+        if settings.kubernetes_read_only:
+            raise HTTPException(403, "Los cambios Kubernetes están desactivados: KUBERNETES_READ_ONLY=true.")
+        from integrations.kubernetes_client import write_tool
+        try:
+            return write_tool(tool, arguments, validate_namespace, validate_name)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if tool == "list_files":
         directory = safe_workspace_path(arguments.get("path", "."))
         if not directory.is_dir():
@@ -273,7 +281,7 @@ def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def requires_confirmation(tool: str) -> bool:
-    return tool in {"write_file", "apply_kubernetes_manifest", "git_clone", "git_commit", "git_push", "ssh_command", "browser_inspect"}
+    return tool in {"write_file", "apply_kubernetes_manifest", "scale_workload", "restart_workload", "delete_pod", "git_clone", "git_pull_rebase", "git_commit", "git_push", "ssh_command", "browser_inspect"}
 
 
 def create_proposal(tool: str, arguments: dict[str, Any], user: str, correlation_id: str) -> dict[str, Any]:

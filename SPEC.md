@@ -101,9 +101,13 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 ### Lectura
 
 - `cluster_status`: lista nodos mediante Kubernetes Python Client.
+- `list_namespaces`: lista namespaces visibles.
 - `list_pods(namespace)`: lista pods del namespace autorizado.
+- `list_events(namespace)`: lista eventos del namespace para diagnóstico.
+- `get_pod(pod, namespace)`: obtiene el estado y configuración del pod.
 - `get_workload(kind, name, namespace)`: lee Deployment, StatefulSet o DaemonSet.
-- `get_pod_logs(pod, namespace, container?)`: lee hasta 200 lineas de logs.
+- `get_pod_logs(pod, namespace, container?, tail_lines?, previous?)`: lee hasta 500 líneas de logs.
+- `rollout_status(kind, name, namespace)`: consulta el estado del rollout.
 - `list_files(path)`: lista hasta 500 entradas bajo `WORKSPACE_ROOT`.
 - `read_file(path)`: lee archivos de hasta 256 KiB bajo `WORKSPACE_ROOT`.
 
@@ -111,8 +115,12 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 
 - `write_file(path, content)`: crea una propuesta; la escritura requiere confirmacion.
 - `apply_kubernetes_manifest(manifest)`: valida YAML, recursos permitidos y namespace; ejecuta dry-run de servidor y luego `kubectl apply` solo si el modo lectura esta desactivado y existe confirmacion.
+- `scale_workload(kind, name, namespace, replicas)`: escala Deployment o StatefulSet entre 0 y 100 réplicas.
+- `restart_workload(kind, name, namespace)`: reinicia un workload mediante una anotación de rollout.
+- `delete_pod(name, namespace)`: elimina un pod con período de gracia para su recreación.
 - `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
+- `git_pull_rebase(repo_path, branch)`: sincroniza `origin/branch` mediante rebase y requiere confirmacion.
 - `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
 - `http_request(url, method)`: `GET`/`HEAD` contra hosts en `EXTERNAL_HTTP_ALLOWED_HOSTS`; limita la respuesta a 50 KiB.
 - `ssh_command(host, port, username, command)`: requiere confirmacion, host en `SSH_ALLOWED_HOSTS` y comando con prefijo permitido.
@@ -122,7 +130,7 @@ El chat acepta hasta tres imagenes JPEG, PNG, WebP o GIF de hasta 5 MiB cada
 una. El backend valida los data URLs y los entrega al modelo como `input_image`
 junto al prompt textual; no persiste ni registra el contenido de la imagen.
 
-No existe una tool de shell arbitrario, una tool de eliminacion de recursos ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales.
+No existe una tool de shell arbitrario ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales. La eliminación se limita a pods y requiere confirmación.
 Las herramientas SSH y navegador tampoco permiten credenciales en los argumentos:
 se obtienen exclusivamente del entorno o de secretos montados en runtime.
 
@@ -159,8 +167,8 @@ Requisitos implementados:
 - Namespace y nombres Kubernetes validados.
 - `ALLOWED_NAMESPACES` limita consultas y manifiestos; `*` habilita todos los namespaces.
 - Path traversal bloqueado fuera de `WORKSPACE_ROOT`.
-- Tipos de manifiesto restringidos a ConfigMap, Service, Deployment, StatefulSet y DaemonSet.
-- `KUBERNETES_READ_ONLY=true` por defecto.
+- Tipos de manifiesto restringidos a recursos namespaced operativos: ConfigMap, Service, Deployment, StatefulSet, DaemonSet, Job, CronJob, Ingress, HPA y PDB.
+- `KUBERNETES_READ_ONLY=true` por defecto en la aplicación y desactivado explícitamente en los manifiestos del entorno para permitir operaciones confirmadas.
 - Dry-run obligatorio antes de aplicar manifiestos.
 - NetworkPolicy para API Kubernetes, DNS, PostgreSQL y Redis.
 - Logs estructurados sin contenido de manifiestos o secretos.
