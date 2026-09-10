@@ -55,7 +55,7 @@ class ChatRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    tool: Literal["cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status", "scale_workload", "restart_workload", "delete_pod", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "git_clone", "git_status", "git_diff", "git_pull_rebase", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
+    tool: Literal["cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status", "scale_workload", "restart_workload", "delete_pod", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "list_git_credentials", "git_clone", "git_status", "git_diff", "git_pull_rebase", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -100,7 +100,8 @@ LLM_TOOLS = [
     {"type": "function", "name": "read_file", "description": "Lee un archivo dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "write_file", "description": "Crea o modifica un archivo autorizado. Siempre requiere confirmación del usuario.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "apply_kubernetes_manifest", "description": "Propone aplicar un manifiesto permitido. Siempre requiere confirmación y el modo lectura debe estar desactivado.", "parameters": {"type": "object", "properties": {"manifest": {"type": "string"}}, "required": ["manifest"], "additionalProperties": False}, "strict": True},
-    {"type": "function", "name": "git_clone", "description": "Propone clonar un repositorio HTTPS autorizado dentro del workspace.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["url", "repo_path", "branch"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "list_git_credentials", "description": "Lista las credenciales Git guardadas del usuario sin revelar secretos.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_clone", "description": "Propone clonar un repositorio HTTPS autorizado; puede usar una credencial guardada por credential_id.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}, "credential_id": {"type": ["string", "null"]}}, "required": ["url", "repo_path", "branch", "credential_id"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_status", "description": "Consulta la rama y cambios de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_diff", "description": "Consulta el diff de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_pull_rebase", "description": "Propone sincronizar el repositorio con origin mediante rebase; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
@@ -198,12 +199,31 @@ def kubectl(arguments: list[str]) -> dict[str, Any]:
         return {"data": output[:50_000]}
 
 
-def execute(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def execute(tool: str, arguments: dict[str, Any], user: str | None = None) -> dict[str, Any]:
+    if tool == "list_git_credentials":
+        if not user:
+            raise HTTPException(401, "Se requiere un usuario para consultar credenciales Git.")
+        try:
+            from git_credentials import list_public
+            return {"repositories": list_public(user)}
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
     if tool.startswith("git_"):
         from integrations import git_client
         try:
             if tool == "git_clone":
-                return git_client.clone(settings.workspace_root, arguments.get("url", ""), arguments.get("repo_path", ""), arguments.get("branch"), settings.git_allowed_hosts, settings.max_tool_runtime_seconds)
+                credential = None
+                if arguments.get("credential_id"):
+                    if not user:
+                        raise ValueError("Se requiere un usuario para usar una credencial Git guardada.")
+                    from git_credentials import get
+                    try:
+                        credential = get(user, arguments["credential_id"])
+                    except (KeyError, RuntimeError) as exc:
+                        raise ValueError(str(exc)) from exc
+                    if credential["url"] != arguments.get("url"):
+                        raise ValueError("La URL no coincide con la credencial Git seleccionada.")
+                return git_client.clone(settings.workspace_root, arguments.get("url", ""), arguments.get("repo_path", ""), arguments.get("branch"), settings.git_allowed_hosts, settings.max_tool_runtime_seconds, credential)
             if tool == "git_status":
                 return git_client.status(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
             if tool == "git_diff":
@@ -297,7 +317,7 @@ def run_action(request: ActionRequest, user: str, correlation_id: str) -> dict[s
     if requires_confirmation(request.tool):
         return create_proposal(request.tool, request.arguments, user, correlation_id)
     audit("tool_started", correlation_id, user, tool=request.tool)
-    result = execute(request.tool, request.arguments)
+    result = execute(request.tool, request.arguments, user)
     audit("tool_succeeded", correlation_id, user, tool=request.tool)
     return {"status": "SUCCEEDED", "tool": request.tool, "result": result}
 
@@ -377,7 +397,7 @@ def run_llm_agent(message: str, history: list[dict[str, str]], user: str, correl
                 proposal["reply"] = f"El modelo propone ejecutar {request.tool}. Revisa los parámetros y confirma para continuar."
                 return {**proposal, "model": settings.model}
             try:
-                result = execute(request.tool, request.arguments)
+                result = execute(request.tool, request.arguments, user)
             except HTTPException as exc:
                 tool_result = {"error": exc.detail, "status_code": exc.status_code}
             else:
@@ -408,6 +428,16 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/git/repositories")
+def list_git_repositories(x_user: str | None = Header(default=None)) -> dict[str, Any]:
+    user = current_user(x_user)
+    try:
+        from git_credentials import list_public
+        return {"repositories": list_public(user)}
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
 @app.post("/api/actions")
 def action(request: ActionRequest, x_user: str | None = Header(default=None)) -> dict[str, Any]:
     user, correlation_id = current_user(x_user), str(uuid.uuid4())
@@ -425,7 +455,7 @@ def confirmation(request: ConfirmationRequest, x_user: str | None = Header(defau
         audit("proposal_cancelled", proposal["correlation_id"], user, tool=proposal["tool"])
         return {"status": "CANCELLED", "correlation_id": proposal["correlation_id"]}
     audit("tool_started", proposal["correlation_id"], user, tool=proposal["tool"])
-    result = execute(proposal["tool"], proposal["arguments"])
+    result = execute(proposal["tool"], proposal["arguments"], user)
     audit("tool_succeeded", proposal["correlation_id"], user, tool=proposal["tool"])
     return {"status": "SUCCEEDED", "correlation_id": proposal["correlation_id"], "tool": proposal["tool"], "result": result}
 

@@ -91,6 +91,7 @@ Herramientas con cambio de estado:
 - `restart_workload`: reinicia un Deployment, StatefulSet o DaemonSet con confirmación.
 - `delete_pod`: elimina un pod para que su controlador lo recree, con confirmación.
 - `git_clone`: propone clonar un repositorio HTTPS de un host permitido en `/workspace`.
+- `list_git_credentials`: lista repositorios Git guardados sin revelar secretos.
 - `git_status` y `git_diff`: inspeccionan un repositorio clonado.
 - `git_pull_rebase`: propone sincronizar la rama con `origin` antes de publicar cambios.
 - `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios.
@@ -177,6 +178,7 @@ ajústalo al dominio real.
 - `GIT_USERNAME`: usuario HTTPS opcional; por defecto `x-access-token`.
 - `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`: una credencial HTTPS opcional para repositorios privados; se usa la primera disponible en ese orden.
 - `GIT_COMMIT_NAME` y `GIT_COMMIT_EMAIL`: identidad determinista usada al crear commits.
+- `GIT_REPOSITORIES_JSON`: JSON inyectado desde un Kubernetes Secret con los repositorios y sus credenciales; nunca se debe guardar en Git.
 - `KUBERNETES_READ_ONLY`: `true` por defecto en el código; el manifiesto de despliegue lo establece en `false` para habilitar operaciones confirmadas.
 - `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas; `*` habilita lectura en todos los namespaces.
 - `WORKSPACE_ROOT`: `/workspace`.
@@ -187,6 +189,12 @@ workloads, además de permisos namespaced para aplicar componentes operativos y
 ejecutar acciones de recuperación. Los cambios se validan en el backend y
 requieren confirmación humana; no se conceden permisos para modificar RBAC ni
 otros recursos de control del clúster.
+
+Las credenciales Git se administran fuera del repositorio y se inyectan en
+`GIT_REPOSITORIES_JSON` desde un Kubernetes Secret. La API
+`GET /api/git/repositories` y la herramienta `list_git_credentials` solo
+devuelven metadatos; `git_clone` usa `credential_id` internamente sin colocar el
+secreto en la URL, logs ni contexto del modelo.
 
 ## Pruebas
 

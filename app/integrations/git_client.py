@@ -66,7 +66,7 @@ def _run_git(arguments: list[str], cwd: Path | None, timeout: int, extra_env: di
     return (result.stdout or result.stderr).strip()[:50_000]
 
 
-def clone(workspace_root: Path, url: str, repo_path: str, branch: str | None, allowed_hosts: set[str], timeout: int) -> dict:
+def clone(workspace_root: Path, url: str, repo_path: str, branch: str | None, allowed_hosts: set[str], timeout: int, credential: dict | None = None) -> dict:
     remote = _validate_remote(url, allowed_hosts)
     branch = _validate_branch(branch)
     destination = _validate_relative_path(workspace_root, repo_path)
@@ -74,7 +74,7 @@ def clone(workspace_root: Path, url: str, repo_path: str, branch: str | None, al
         raise ValueError("La ruta destino ya existe; usa otra ruta para evitar sobrescribir trabajo.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     args = ["clone", "--", remote, str(destination)] if branch is None else ["clone", "--branch", branch, "--", remote, str(destination)]
-    extra_env, askpass = _askpass_environment()
+    extra_env, askpass = _askpass_environment(credential)
     try:
         output = _run_git(args, None, timeout, extra_env)
     except Exception:
@@ -113,9 +113,9 @@ def pull_rebase(workspace_root: Path, repo_path: str, branch: str | None, timeou
     return {"repo_path": repo_path, "branch": branch, "output": output or "Repositorio sincronizado."}
 
 
-def _askpass_environment() -> tuple[dict[str, str], Path | None]:
+def _askpass_environment(credential: dict | None = None) -> tuple[dict[str, str], Path | None]:
     # PAT, API key, password and the legacy token are all Git HTTPS passwords.
-    password = next((os.getenv(name) for name in ("GIT_PAT", "GIT_API_KEY", "GIT_PASSWORD", "GIT_TOKEN") if os.getenv(name)), None)
+    password = credential.get("secret") if credential else next((os.getenv(name) for name in ("GIT_PAT", "GIT_API_KEY", "GIT_PASSWORD", "GIT_TOKEN") if os.getenv(name)), None)
     if not password:
         return {}, None
     descriptor, filename = tempfile.mkstemp(prefix="git-askpass-", suffix=".sh")
@@ -123,7 +123,8 @@ def _askpass_environment() -> tuple[dict[str, str], Path | None]:
     askpass = Path(filename)
     askpass.write_text("#!/bin/sh\ncase \"$1\" in *Username*) printf '%s\\n' \"${GIT_USERNAME:-x-access-token}\" ;; *) printf '%s\\n' \"$GIT_TOKEN\" ;; esac\n", encoding="utf-8")
     askpass.chmod(0o700)
-    return {"GIT_ASKPASS": str(askpass), "GIT_USERNAME": os.getenv("GIT_USERNAME", "x-access-token"), "GIT_TOKEN": password}, askpass
+    username = credential.get("username") if credential else os.getenv("GIT_USERNAME", "x-access-token")
+    return {"GIT_ASKPASS": str(askpass), "GIT_USERNAME": username, "GIT_TOKEN": password}, askpass
 
 
 def commit(workspace_root: Path, repo_path: str, message: str, timeout: int) -> dict:

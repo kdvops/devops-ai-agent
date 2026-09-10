@@ -41,6 +41,11 @@ spec:
                 secretKeyRef:
                   name: devops-ai-data
                   key: POSTGRES_PASSWORD
+            - name: GIT_REPOSITORIES_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: devops-ai-agent-secrets
+                  key: GIT_REPOSITORIES_JSON
             - name: GIT_TOKEN
               valueFrom:
                 secretKeyRef:

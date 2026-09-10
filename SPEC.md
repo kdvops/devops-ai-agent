@@ -28,7 +28,7 @@ inmutables.
 - **Ejecucion aislada:** Kubernetes Jobs preparado para tareas largas.
 - **Servidores externos:** Ansible Runner preparado como adaptador.
 - **Contenedores:** Docker y Docker Compose para desarrollo.
-- **Git:** binario Git con URLs HTTPS y hosts permitidos; credenciales solo mediante runtime Secret.
+- **Git:** binario Git con URLs HTTPS y hosts permitidos; credenciales inyectadas mediante runtime Secret.
 - **Automatizacion externa:** HTTP(S) de solo lectura, SSH restringido y Playwright headless con allowlists.
 - **GitOps:** Kustomize con `base` y overlay `dev`, sincronizado por Argo CD.
 
@@ -119,6 +119,7 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 - `restart_workload(kind, name, namespace)`: reinicia un workload mediante una anotación de rollout.
 - `delete_pod(name, namespace)`: elimina un pod con período de gracia para su recreación.
 - `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
+- `list_git_credentials()`: lista metadatos de credenciales Git sin secretos.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
 - `git_pull_rebase(repo_path, branch)`: sincroniza `origin/branch` mediante rebase y requiere confirmacion.
 - `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
@@ -133,6 +134,11 @@ junto al prompt textual; no persiste ni registra el contenido de la imagen.
 No existe una tool de shell arbitrario ni una tool Git que permita pasar argumentos libres. Los repositorios se limitan al workspace y las URLs no pueden contener credenciales. La eliminación se limita a pods y requiere confirmación.
 Las herramientas SSH y navegador tampoco permiten credenciales en los argumentos:
 se obtienen exclusivamente del entorno o de secretos montados en runtime.
+
+Las credenciales se administran fuera de la aplicación y se inyectan mediante
+`GIT_REPOSITORIES_JSON` desde un Kubernetes Secret. Nunca se almacenan en Git,
+logs, respuestas ni contexto del modelo. `git_clone` puede recibir
+`credential_id` para usarlas solo durante la operación HTTPS.
 
 ## 7. API HTTP
 
@@ -219,6 +225,7 @@ Variables principales:
 | `GIT_API_KEY` | No | API key runtime usada como password HTTPS. |
 | `GIT_PASSWORD` | No | Password runtime para clone/push HTTPS privado. |
 | `GIT_TOKEN` | No | Alias legado de credencial HTTPS; Secret, nunca Git. |
+| `GIT_REPOSITORIES_JSON` | Producción | JSON de repositorios y credenciales inyectado desde Secret. |
 | `GIT_COMMIT_NAME` | No | Identidad del autor de commits automáticos. |
 | `GIT_COMMIT_EMAIL` | No | Email del autor de commits automáticos. |
 | `KUBECONFIG` | Local | `/home/agent/.kube/config`. |
