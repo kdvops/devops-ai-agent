@@ -48,7 +48,8 @@ spec:
     name: devops-ai-agent
     kind: Deployment
   minReplicaCount: 1
-  maxReplicaCount: 2
+  # The backend mounts a ReadWriteOnce workspace PVC; keep one writer replica.
+  maxReplicaCount: 1
   cooldownPeriod: 300
   triggers:
     - type: external-push
