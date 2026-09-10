@@ -132,7 +132,11 @@ def browser_inspect(arguments: dict[str, Any], timeout: int) -> dict[str, Any]:
         raise RuntimeError("Playwright no está instalado en el contenedor.") from exc
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+            launch_options = {"headless": True, "args": ["--disable-dev-shm-usage", "--no-sandbox"]}
+            executable_path = os.getenv("PLAYWRIGHT_EXECUTABLE_PATH")
+            if executable_path:
+                launch_options["executable_path"] = executable_path
+            browser = playwright.chromium.launch(**launch_options)
             try:
                 page = browser.new_page()
                 response = page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1_000)
