@@ -241,13 +241,7 @@ def execute(tool: str, arguments: dict[str, Any], user: str | None = None) -> di
         from integrations.kubernetes_client import read_tool
         return read_tool(tool, arguments, validate_namespace, validate_name)
     if tool in {"scale_workload", "restart_workload", "delete_pod"}:
-        if settings.kubernetes_read_only:
-            raise HTTPException(403, "Los cambios Kubernetes están desactivados: KUBERNETES_READ_ONLY=true.")
-        from integrations.kubernetes_client import write_tool
-        try:
-            return write_tool(tool, arguments, validate_namespace, validate_name)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(409, "Los cambios Kubernetes deben gestionarse por GitOps; edita el manifiesto, haz commit y push para que Argo CD sincronice.")
     if tool == "list_files":
         directory = safe_workspace_path(arguments.get("path", "."))
         if not directory.is_dir():

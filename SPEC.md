@@ -116,9 +116,7 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 - `write_file(path, content)`: crea una propuesta; la escritura requiere confirmacion.
 - `apply_kubernetes_manifest(manifest)`: no modifica directamente el clúster; el flujo GitOps usa `update_gitops_manifest` para validar y escribir el YAML en el repositorio.
 - `update_gitops_manifest(repo_path, manifest_path, manifest)`: valida recursos y namespace, y escribe el manifiesto dentro de un repositorio GitOps clonado. Luego `git_commit` y `git_push` publican el cambio para que Argo CD lo sincronice.
-- `scale_workload(kind, name, namespace, replicas)`: escala Deployment o StatefulSet entre 0 y 100 réplicas.
-- `restart_workload(kind, name, namespace)`: reinicia un workload mediante una anotación de rollout.
-- `delete_pod(name, namespace)`: elimina un pod con período de gracia para su recreación.
+- `scale_workload`, `restart_workload` y `delete_pod`: rechazan cambios directos; las modificaciones equivalentes deben hacerse en el repositorio GitOps.
 - `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
 - `list_git_credentials()`: lista metadatos de credenciales Git sin secretos.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
@@ -175,8 +173,8 @@ Requisitos implementados:
 - `ALLOWED_NAMESPACES` limita consultas y manifiestos; `*` habilita todos los namespaces.
 - Path traversal bloqueado fuera de `WORKSPACE_ROOT`.
 - Tipos de manifiesto restringidos a recursos namespaced operativos: ConfigMap, Service, Deployment, StatefulSet, DaemonSet, Job, CronJob, Ingress, HPA y PDB.
-- `KUBERNETES_READ_ONLY=true` por defecto en la aplicación y desactivado explícitamente en los manifiestos del entorno para permitir operaciones confirmadas.
-- Dry-run obligatorio antes de aplicar manifiestos.
+- `KUBERNETES_READ_ONLY=true` en la aplicación y en los manifiestos de todos los entornos; el ServiceAccount no tiene permisos RBAC de escritura.
+- Los manifiestos nunca se aplican directamente: se validan, se escriben en Git y Argo CD los sincroniza.
 - NetworkPolicy para API Kubernetes, DNS, PostgreSQL y Redis.
 - Logs estructurados sin contenido de manifiestos o secretos.
 

@@ -88,9 +88,7 @@ Herramientas con cambio de estado:
 - `write_file`: propone escribir en el workspace.
 - `apply_kubernetes_manifest`: no aplica directamente al clúster; dirige el flujo a `update_gitops_manifest`.
 - `update_gitops_manifest`: valida YAML y lo escribe dentro del repositorio GitOps; después `git_commit` y `git_push` permiten que Argo CD sincronice el cambio.
-- `scale_workload`: cambia réplicas de Deployments o StatefulSets con confirmación.
-- `restart_workload`: reinicia un Deployment, StatefulSet o DaemonSet con confirmación.
-- `delete_pod`: elimina un pod para que su controlador lo recree, con confirmación.
+- `scale_workload`, `restart_workload` y `delete_pod`: rechazan cambios directos; las correcciones se realizan mediante manifiestos GitOps.
 - `git_clone`: propone clonar un repositorio HTTPS de un host permitido en `/workspace`.
 - `list_git_credentials`: lista repositorios Git guardados sin revelar secretos.
 - `git_status` y `git_diff`: inspeccionan un repositorio clonado.
@@ -181,7 +179,7 @@ ajústalo al dominio real.
 - `GIT_PAT`, `GIT_API_KEY`, `GIT_PASSWORD` o `GIT_TOKEN`: una credencial HTTPS opcional para repositorios privados; se usa la primera disponible en ese orden.
 - `GIT_COMMIT_NAME` y `GIT_COMMIT_EMAIL`: identidad determinista usada al crear commits.
 - `GIT_REPOSITORIES_JSON`: JSON inyectado desde un Kubernetes Secret con los repositorios y sus credenciales; nunca se debe guardar en Git.
-- `KUBERNETES_READ_ONLY`: `true` por defecto en el código; el manifiesto de despliegue lo establece en `false` para habilitar operaciones confirmadas.
+- `KUBERNETES_READ_ONLY`: `true`; el agente no tiene permisos RBAC de escritura y los cambios pasan por GitOps.
 - `ALLOWED_NAMESPACES`: namespaces autorizados para herramientas; `*` habilita lectura en todos los namespaces.
 - `WORKSPACE_ROOT`: `/workspace`.
 - `DATABASE_URL`, `POSTGRES_PASSWORD` y `REDIS_URL`: persistencia/cola.
