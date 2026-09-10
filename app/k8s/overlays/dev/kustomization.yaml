@@ -9,6 +9,6 @@ patches:
   - path: storage-patch.yaml
 images:
   - name: ghcr.io/kdvops/devops-ai-agent
-    newTag: sha-480aad4
+    newTag: sha-4bf5978
   - name: ghcr.io/kdvops/devops-ai-agent-ui
     newTag: sha-32bac1b365b9d819a8d744d5dc1fda8ffad9ada1
