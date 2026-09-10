@@ -66,6 +66,21 @@ def test_git_state_changes_require_confirmation() -> None:
     assert not main.requires_confirmation("git_diff")
 
 
+def test_direct_kubernetes_apply_is_rejected_for_gitops() -> None:
+    with pytest.raises(HTTPException) as error:
+        main.execute("apply_kubernetes_manifest", {"manifest": "kind: Service\nmetadata:\n  name: api\n  namespace: devops-ai\n"}, "operator")
+    assert error.value.status_code == 409
+
+
+def test_gitops_manifest_is_written_inside_git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "gitops"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.setattr(main.settings, "workspace_root", tmp_path)
+    result = main.execute("update_gitops_manifest", {"repo_path": "gitops", "manifest_path": "app/deployment.yaml", "manifest": "kind: Service\nmetadata:\n  name: api\n  namespace: devops-ai\n"}, "operator")
+    assert result["status"] == "WRITTEN_TO_GITOPS_REPOSITORY"
+    assert (repo / "app" / "deployment.yaml").is_file()
+
+
 def test_git_remote_rejects_embedded_credentials() -> None:
     from integrations.git_client import _validate_remote
 

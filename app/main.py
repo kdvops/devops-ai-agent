@@ -6,8 +6,6 @@ import json
 import logging
 import os
 import re
-import subprocess
-import tempfile
 import time
 import uuid
 import asyncio
@@ -55,7 +53,7 @@ class ChatRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    tool: Literal["cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status", "scale_workload", "restart_workload", "delete_pod", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "list_git_credentials", "git_clone", "git_status", "git_diff", "git_pull_rebase", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
+    tool: Literal["cluster_status", "list_namespaces", "list_pods", "list_events", "get_pod", "get_workload", "get_pod_logs", "rollout_status", "scale_workload", "restart_workload", "delete_pod", "list_files", "read_file", "write_file", "apply_kubernetes_manifest", "update_gitops_manifest", "list_git_credentials", "git_clone", "git_status", "git_diff", "git_pull_rebase", "git_commit", "git_push", "http_request", "ssh_command", "browser_inspect"]
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -99,14 +97,15 @@ LLM_TOOLS = [
     {"type": "function", "name": "list_files", "description": "Lista archivos dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "read_file", "description": "Lee un archivo dentro del workspace autorizado.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "write_file", "description": "Crea o modifica un archivo autorizado. Siempre requiere confirmación del usuario.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}, "strict": True},
-    {"type": "function", "name": "apply_kubernetes_manifest", "description": "Propone aplicar un manifiesto permitido. Siempre requiere confirmación y el modo lectura debe estar desactivado.", "parameters": {"type": "object", "properties": {"manifest": {"type": "string"}}, "required": ["manifest"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "apply_kubernetes_manifest", "description": "Rechaza aplicar directamente al clúster; usa update_gitops_manifest para dejar el cambio en el repositorio GitOps.", "parameters": {"type": "object", "properties": {"manifest": {"type": "string"}}, "required": ["manifest"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "update_gitops_manifest", "description": "Propone escribir un manifiesto validado dentro de un repositorio GitOps; no modifica directamente Kubernetes.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "manifest_path": {"type": "string"}, "manifest": {"type": "string"}}, "required": ["repo_path", "manifest_path", "manifest"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "list_git_credentials", "description": "Lista las credenciales Git guardadas del usuario sin revelar secretos.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_clone", "description": "Propone clonar un repositorio HTTPS autorizado; puede usar una credencial guardada por credential_id.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}, "credential_id": {"type": ["string", "null"]}}, "required": ["url", "repo_path", "branch", "credential_id"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_status", "description": "Consulta la rama y cambios de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_diff", "description": "Consulta el diff de un repositorio clonado.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}}, "required": ["repo_path"], "additionalProperties": False}, "strict": True},
-    {"type": "function", "name": "git_pull_rebase", "description": "Propone sincronizar el repositorio con origin mediante rebase; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_pull_rebase", "description": "Propone sincronizar el repositorio con origin mediante rebase usando una credencial del Secret; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}, "credential_id": {"type": ["string", "null"]}}, "required": ["repo_path", "branch", "credential_id"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "git_commit", "description": "Propone crear un commit de los cambios del repositorio; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "message": {"type": "string"}}, "required": ["repo_path", "message"], "additionalProperties": False}, "strict": True},
-    {"type": "function", "name": "git_push", "description": "Propone enviar una rama al remoto origin; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}}, "required": ["repo_path", "branch"], "additionalProperties": False}, "strict": True},
+    {"type": "function", "name": "git_push", "description": "Propone enviar una rama al remoto origin usando una credencial del Secret; requiere confirmación.", "parameters": {"type": "object", "properties": {"repo_path": {"type": "string"}, "branch": {"type": ["string", "null"]}, "credential_id": {"type": ["string", "null"]}}, "required": ["repo_path", "branch", "credential_id"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "http_request", "description": "Consulta una URL HTTP(S) autorizada con GET o HEAD, equivalente a curl de solo lectura.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "method": {"type": "string", "enum": ["GET", "HEAD"]}}, "required": ["url", "method"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "ssh_command", "description": "Propone ejecutar un comando de diagnóstico permitido en un host SSH autorizado; requiere confirmación.", "parameters": {"type": "object", "properties": {"host": {"type": "string"}, "port": {"type": ["integer", "null"]}, "username": {"type": ["string", "null"]}, "command": {"type": "string"}}, "required": ["host", "port", "username", "command"], "additionalProperties": False}, "strict": True},
     {"type": "function", "name": "browser_inspect", "description": "Propone abrir una URL autorizada con Playwright y devolver título, estado y texto visible; requiere confirmación.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "selector": {"type": ["string", "null"]}}, "required": ["url", "selector"], "additionalProperties": False}, "strict": True},
@@ -182,23 +181,6 @@ def validate_manifest(manifest: str) -> None:
         validate_namespace(metadata.get("namespace"))
 
 
-def kubectl(arguments: list[str]) -> dict[str, Any]:
-    command = ["kubectl", f"--request-timeout={settings.max_tool_runtime_seconds}s", *arguments]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=settings.max_tool_runtime_seconds + 2, check=False)
-    except FileNotFoundError as exc:
-        raise HTTPException(503, "kubectl no está disponible en el contenedor.") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise HTTPException(504, "La operación Kubernetes excedió el tiempo permitido.") from exc
-    if result.returncode:
-        raise HTTPException(502, "Kubernetes rechazó la operación o la identidad no tiene permisos.")
-    output = result.stdout.strip()
-    try:
-        return {"data": json.loads(output)}
-    except json.JSONDecodeError:
-        return {"data": output[:50_000]}
-
-
 def execute(tool: str, arguments: dict[str, Any], user: str | None = None) -> dict[str, Any]:
     if tool == "list_git_credentials":
         if not user:
@@ -211,29 +193,33 @@ def execute(tool: str, arguments: dict[str, Any], user: str | None = None) -> di
     if tool.startswith("git_"):
         from integrations import git_client
         try:
+            credential = None
+            if arguments.get("credential_id"):
+                if not user:
+                    raise ValueError("Se requiere un usuario para usar una credencial Git guardada.")
+                from git_credentials import get
+                try:
+                    credential = get(user, arguments["credential_id"])
+                except (KeyError, RuntimeError) as exc:
+                    raise ValueError(str(exc)) from exc
             if tool == "git_clone":
-                credential = None
-                if arguments.get("credential_id"):
-                    if not user:
-                        raise ValueError("Se requiere un usuario para usar una credencial Git guardada.")
-                    from git_credentials import get
-                    try:
-                        credential = get(user, arguments["credential_id"])
-                    except (KeyError, RuntimeError) as exc:
-                        raise ValueError(str(exc)) from exc
-                    if credential["url"] != arguments.get("url"):
-                        raise ValueError("La URL no coincide con la credencial Git seleccionada.")
+                if credential and credential["url"] != arguments.get("url"):
+                    raise ValueError("La URL no coincide con la credencial Git seleccionada.")
                 return git_client.clone(settings.workspace_root, arguments.get("url", ""), arguments.get("repo_path", ""), arguments.get("branch"), settings.git_allowed_hosts, settings.max_tool_runtime_seconds, credential)
             if tool == "git_status":
                 return git_client.status(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
             if tool == "git_diff":
                 return git_client.diff(settings.workspace_root, arguments.get("repo_path", ""), settings.max_tool_runtime_seconds)
             if tool == "git_pull_rebase":
-                return git_client.pull_rebase(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds)
+                if credential and git_client.remote_url(settings.workspace_root, arguments.get("repo_path", "")) != credential["url"]:
+                    raise ValueError("La URL remota no coincide con la credencial Git seleccionada.")
+                return git_client.pull_rebase(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds, credential)
             if tool == "git_commit":
                 return git_client.commit(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("message", ""), settings.max_tool_runtime_seconds)
             if tool == "git_push":
-                return git_client.push(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds)
+                if credential and git_client.remote_url(settings.workspace_root, arguments.get("repo_path", "")) != credential["url"]:
+                    raise ValueError("La URL remota no coincide con la credencial Git seleccionada.")
+                return git_client.push(settings.workspace_root, arguments.get("repo_path", ""), arguments.get("branch"), settings.max_tool_runtime_seconds, credential)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         except RuntimeError as exc:
@@ -283,25 +269,29 @@ def execute(tool: str, arguments: dict[str, Any], user: str | None = None) -> di
         target.write_text(content, encoding="utf-8")
         return {"path": str(target.relative_to(settings.workspace_root)), "previous_sha256": hashlib.sha256(previous).hexdigest(), "sha256": hashlib.sha256(content.encode()).hexdigest()}
     if tool == "apply_kubernetes_manifest":
-        if settings.kubernetes_read_only:
-            raise HTTPException(403, "Los cambios Kubernetes están desactivados: KUBERNETES_READ_ONLY=true.")
+        raise HTTPException(409, "Los despliegues deben gestionarse por GitOps. Usa update_gitops_manifest y luego git_commit/git_push; no se modifica Kubernetes directamente.")
+    if tool == "update_gitops_manifest":
+        if not isinstance(arguments.get("repo_path"), str) or not isinstance(arguments.get("manifest_path"), str):
+            raise HTTPException(422, "La ruta del repositorio y del manifiesto son obligatorias.")
         manifest = arguments.get("manifest")
         if not isinstance(manifest, str) or not manifest.strip() or len(manifest) > 256_000:
             raise HTTPException(422, "El manifiesto no es válido o supera el tamaño máximo.")
         validate_manifest(manifest)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as handle:
-            handle.write(manifest)
-            manifest_path = handle.name
-        try:
-            kubectl(["apply", "--dry-run=server", "-f", manifest_path])
-            return kubectl(["apply", "-f", manifest_path])
-        finally:
-            Path(manifest_path).unlink(missing_ok=True)
+        repo = safe_workspace_path(arguments.get("repo_path", ""))
+        target = safe_workspace_path(str(Path(arguments.get("repo_path", "")) / arguments.get("manifest_path", "")))
+        if not repo.is_dir() or not (repo / ".git").is_dir():
+            raise HTTPException(422, "La ruta indicada no contiene un repositorio GitOps clonado.")
+        if target == repo or repo not in target.parents or target.suffix.lower() not in {".yaml", ".yml"}:
+            raise HTTPException(422, "El manifiesto debe ser YAML y permanecer dentro del repositorio GitOps.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        previous = target.read_bytes() if target.exists() else b""
+        target.write_text(manifest, encoding="utf-8")
+        return {"repo_path": arguments["repo_path"], "manifest_path": arguments["manifest_path"], "previous_sha256": hashlib.sha256(previous).hexdigest(), "sha256": hashlib.sha256(manifest.encode()).hexdigest(), "status": "WRITTEN_TO_GITOPS_REPOSITORY"}
     raise HTTPException(422, "Herramienta no soportada.")
 
 
 def requires_confirmation(tool: str) -> bool:
-    return tool in {"write_file", "apply_kubernetes_manifest", "scale_workload", "restart_workload", "delete_pod", "git_clone", "git_pull_rebase", "git_commit", "git_push", "ssh_command", "browser_inspect"}
+    return tool in {"write_file", "apply_kubernetes_manifest", "update_gitops_manifest", "scale_workload", "restart_workload", "delete_pod", "git_clone", "git_pull_rebase", "git_commit", "git_push", "ssh_command", "browser_inspect"}
 
 
 def create_proposal(tool: str, arguments: dict[str, Any], user: str, correlation_id: str) -> dict[str, Any]:

@@ -86,7 +86,8 @@ Herramientas de lectura disponibles:
 Herramientas con cambio de estado:
 
 - `write_file`: propone escribir en el workspace.
-- `apply_kubernetes_manifest`: valida YAML, tipo, namespace y ejecuta dry-run antes de aplicar; permanece bloqueada con `KUBERNETES_READ_ONLY=true`.
+- `apply_kubernetes_manifest`: no aplica directamente al clúster; dirige el flujo a `update_gitops_manifest`.
+- `update_gitops_manifest`: valida YAML y lo escribe dentro del repositorio GitOps; después `git_commit` y `git_push` permiten que Argo CD sincronice el cambio.
 - `scale_workload`: cambia réplicas de Deployments o StatefulSets con confirmación.
 - `restart_workload`: reinicia un Deployment, StatefulSet o DaemonSet con confirmación.
 - `delete_pod`: elimina un pod para que su controlador lo recree, con confirmación.
@@ -94,7 +95,7 @@ Herramientas con cambio de estado:
 - `list_git_credentials`: lista repositorios Git guardados sin revelar secretos.
 - `git_status` y `git_diff`: inspeccionan un repositorio clonado.
 - `git_pull_rebase`: propone sincronizar la rama con `origin` antes de publicar cambios.
-- `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios.
+- `git_commit` y `git_push`: requieren confirmación humana antes de crear o publicar cambios y pueden usar `credential_id` del Secret.
 - `http_request`: consulta URLs HTTP(S) autorizadas con `GET` o `HEAD`, equivalente a `curl` de solo lectura.
 - `ssh_command`: ejecuta comandos de diagnóstico permitidos en hosts SSH autorizados y requiere confirmación.
 - `browser_inspect`: abre una página autorizada con Playwright y devuelve estado, título y texto visible; requiere confirmación.

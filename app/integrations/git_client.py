@@ -93,6 +93,11 @@ def _repo(workspace_root: Path, repo_path: str) -> Path:
     return candidate
 
 
+def remote_url(workspace_root: Path, repo_path: str) -> str:
+    """Return origin URL for credential-to-repository binding."""
+    return _run_git(["config", "--get", "remote.origin.url"], _repo(workspace_root, repo_path), 10)
+
+
 def status(workspace_root: Path, repo_path: str, timeout: int) -> dict:
     repo = _repo(workspace_root, repo_path)
     return {"repo_path": repo_path, "branch": _run_git(["branch", "--show-current"], repo, timeout), "status": _run_git(["status", "--short"], repo, timeout)}
@@ -103,13 +108,18 @@ def diff(workspace_root: Path, repo_path: str, timeout: int) -> dict:
     return {"repo_path": repo_path, "diff": _run_git(["diff", "--no-ext-diff", "--", "."], repo, timeout)}
 
 
-def pull_rebase(workspace_root: Path, repo_path: str, branch: str | None, timeout: int) -> dict:
+def pull_rebase(workspace_root: Path, repo_path: str, branch: str | None, timeout: int, credential: dict | None = None) -> dict:
     """Synchronize a repository without overwriting uncommitted work."""
     repo = _repo(workspace_root, repo_path)
     branch = _validate_branch(branch) or _run_git(["branch", "--show-current"], repo, timeout)
     if not branch:
         raise ValueError("No hay una rama activa para sincronizar.")
-    output = _run_git(["pull", "--rebase", "origin", branch], repo, timeout)
+    extra_env, askpass = _askpass_environment(credential)
+    try:
+        output = _run_git(["pull", "--rebase", "origin", branch], repo, timeout, extra_env)
+    finally:
+        if askpass:
+            askpass.unlink(missing_ok=True)
     return {"repo_path": repo_path, "branch": branch, "output": output or "Repositorio sincronizado."}
 
 
@@ -142,12 +152,12 @@ def commit(workspace_root: Path, repo_path: str, message: str, timeout: int) -> 
     return {"repo_path": repo_path, "branch": _run_git(["branch", "--show-current"], repo, timeout), "output": output}
 
 
-def push(workspace_root: Path, repo_path: str, branch: str | None, timeout: int) -> dict:
+def push(workspace_root: Path, repo_path: str, branch: str | None, timeout: int, credential: dict | None = None) -> dict:
     repo = _repo(workspace_root, repo_path)
     branch = _validate_branch(branch) or _run_git(["branch", "--show-current"], repo, timeout)
     if not branch:
         raise ValueError("No hay una rama activa para hacer push.")
-    extra_env, askpass = _askpass_environment()
+    extra_env, askpass = _askpass_environment(credential)
     try:
         output = _run_git(["push", "origin", branch], repo, timeout, extra_env)
     finally:

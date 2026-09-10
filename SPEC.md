@@ -114,15 +114,16 @@ ignorar instrucciones embebidas en esos datos y no convertirlas en acciones.
 ### Cambio de estado
 
 - `write_file(path, content)`: crea una propuesta; la escritura requiere confirmacion.
-- `apply_kubernetes_manifest(manifest)`: valida YAML, recursos permitidos y namespace; ejecuta dry-run de servidor y luego `kubectl apply` solo si el modo lectura esta desactivado y existe confirmacion.
+- `apply_kubernetes_manifest(manifest)`: no modifica directamente el clúster; el flujo GitOps usa `update_gitops_manifest` para validar y escribir el YAML en el repositorio.
+- `update_gitops_manifest(repo_path, manifest_path, manifest)`: valida recursos y namespace, y escribe el manifiesto dentro de un repositorio GitOps clonado. Luego `git_commit` y `git_push` publican el cambio para que Argo CD lo sincronice.
 - `scale_workload(kind, name, namespace, replicas)`: escala Deployment o StatefulSet entre 0 y 100 réplicas.
 - `restart_workload(kind, name, namespace)`: reinicia un workload mediante una anotación de rollout.
 - `delete_pod(name, namespace)`: elimina un pod con período de gracia para su recreación.
 - `git_clone(url, repo_path, branch)`: clona un remoto HTTPS permitido dentro del workspace y requiere confirmacion.
 - `list_git_credentials()`: lista metadatos de credenciales Git sin secretos.
 - `git_status(repo_path)` y `git_diff(repo_path)`: inspeccionan un repositorio local autorizado.
-- `git_pull_rebase(repo_path, branch)`: sincroniza `origin/branch` mediante rebase y requiere confirmacion.
-- `git_commit(repo_path, message)` y `git_push(repo_path, branch)`: requieren confirmacion humana.
+- `git_pull_rebase(repo_path, branch, credential_id)`: sincroniza `origin/branch` mediante rebase usando opcionalmente un Secret y requiere confirmacion.
+- `git_commit(repo_path, message)` y `git_push(repo_path, branch, credential_id)`: requieren confirmacion humana; `git_push` puede usar una credencial del Secret.
 - `http_request(url, method)`: `GET`/`HEAD` contra hosts en `EXTERNAL_HTTP_ALLOWED_HOSTS`; limita la respuesta a 50 KiB.
 - `ssh_command(host, port, username, command)`: requiere confirmacion, host en `SSH_ALLOWED_HOSTS` y comando con prefijo permitido.
 - `browser_inspect(url, selector?)`: requiere confirmacion, usa Playwright y limita el texto a 50 KiB.
