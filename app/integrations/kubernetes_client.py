@@ -30,6 +30,25 @@ def read_tool(tool: str, arguments: dict, validate_namespace, validate_name) -> 
     elif tool == "list_events":
         namespace = validate_namespace(arguments.get("namespace"))
         result = core.list_namespaced_event(namespace)
+    elif tool == "list_services":
+        namespace = validate_namespace(arguments.get("namespace"))
+        result = core.list_namespaced_service(namespace)
+    elif tool == "list_configmaps":
+        namespace = validate_namespace(arguments.get("namespace"))
+        result = core.list_namespaced_config_map(namespace)
+        result = {
+            "items": [
+                {
+                    "name": item.metadata.name,
+                    "namespace": item.metadata.namespace,
+                    "labels": item.metadata.labels or {},
+                    "annotations": item.metadata.annotations or {},
+                }
+                for item in result.items
+            ]
+        }
+    elif tool == "get_node":
+        result = core.read_node(validate_name(arguments.get("name", ""), "El nodo"))
     elif tool == "get_pod":
         namespace = validate_namespace(arguments.get("namespace"))
         result = core.read_namespaced_pod(validate_name(arguments.get("pod", ""), "El pod"), namespace)

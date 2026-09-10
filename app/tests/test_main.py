@@ -72,6 +72,17 @@ def test_direct_kubernetes_apply_is_rejected_for_gitops() -> None:
     assert error.value.status_code == 409
 
 
+def test_direct_kubernetes_operations_are_rejected_for_gitops() -> None:
+    for tool, arguments in (
+        ("scale_workload", {"kind": "deployment", "name": "api", "namespace": "devops-ai", "replicas": 2}),
+        ("restart_workload", {"kind": "deployment", "name": "api", "namespace": "devops-ai"}),
+        ("delete_pod", {"name": "api-123", "namespace": "devops-ai"}),
+    ):
+        with pytest.raises(HTTPException) as error:
+            main.execute(tool, arguments, "operator")
+        assert error.value.status_code == 409
+
+
 def test_gitops_manifest_is_written_inside_git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "gitops"
     (repo / ".git").mkdir(parents=True)
