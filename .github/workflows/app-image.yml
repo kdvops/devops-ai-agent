@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/**"
+      - "app/*.py"
+      - "app/integrations/**"
+      - "app/requirements.txt"
+      - "app/Dockerfile"
       - ".github/workflows/app-image.yml"
   workflow_dispatch:
 
