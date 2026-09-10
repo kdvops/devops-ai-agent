@@ -23,6 +23,18 @@ spec:
       namespace: devops-ai
       jsonPointers:
         - /spec/volumeClaimTemplates
+    - group: apps
+      kind: Deployment
+      name: devops-ai-agent
+      namespace: devops-ai
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: devops-ai-agent-frontend
+      namespace: devops-ai
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       selfHeal: true
